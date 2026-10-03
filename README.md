@@ -16,7 +16,7 @@
 
 Requirements: Node.js 20+ and a PostgreSQL database (local, or Supabase / Neon / any hosted Postgres).
 
-1. Copy `.env.example` to `.env.local` and set:
+1. Create `.env.local` in the project root with:
    - `DATABASE_URL` — your Postgres connection string. On Supabase use **Connect → Session pooler** (port 5432).
    - `JWT_SECRET` — a long random string.
 2. Install and create the tables:
@@ -40,7 +40,7 @@ Requirements: Node.js 20+ and a PostgreSQL database (local, or Supabase / Neon /
 | Manager | `manager@messhisab.com` | `Manager@123` |
 | Member | `member@messhisab.com` | `Member@123` |
 
-Override them with the `SEED_*` variables in `.env.example`, and change the passwords after first sign-in (Profile → Security). Without seeding, the **first account registered becomes the manager** automatically.
+Override them with `SEED_MANAGER_EMAIL`, `SEED_MANAGER_PASSWORD`, `SEED_MEMBER_EMAIL`, `SEED_MEMBER_PASSWORD` in `.env.local`, and change the passwords after first sign-in (Profile → Security). Without seeding, the **first account registered becomes the manager** automatically.
 
 ## How accounts work
 

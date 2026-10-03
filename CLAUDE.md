@@ -7,7 +7,7 @@ Bangladesh-focused mess management & monthly accounting app (meals, bazar, house
 ## Commands
 
 ```bash
-npm run dev            # dev server (needs .env.local: DATABASE_URL, JWT_SECRET — see .env.example)
+npm run dev            # dev server (needs .env.local: DATABASE_URL, JWT_SECRET)
 npm run build          # prisma generate + next build (also type-checks)
 npm run lint           # eslint (react-hooks v7 rules are strict)
 npm test               # accounting unit tests (node --test, no DB needed)
