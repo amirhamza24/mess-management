@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MessHisab
 
-## Getting Started
+**Smart Mess Management & Monthly Hisab** — manage meals, bazar, house rent, payments, expenses and the monthly mess হিসাব in one place. Built for bachelor, student and job-holder messes in Bangladesh.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Accounts with manager approval** — anyone can register, but can only sign in after a manager approves them. Managers can make any user a manager or member at any time, suspend accounts and reset passwords.
+- **Two roles** — Manager (full control) and Member (view only), checked on the server for every request.
+- **Monthly cycles** — start a month with the members staying, add/remove members mid-month, close (lock) and reopen months.
+- **Meals** — breakfast/lunch/dinner with half meals, extra/guest indicator, copy previous day, and a full-month matrix.
+- **Bazar & Food**, **House Rent**, **Other Expenses**, **Payments** (cash, bKash, Nagad, bank) — kept as separate accounts.
+- **Monthly হিসাব** — meal rate, rent and other-expense accounts plus each member's final settlement (Due / Advance).
+- **Reports & PDF**, dashboard charts, বাংলা / English, dark / light mode, mobile layout.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Requirements: Node.js 20+ and a PostgreSQL database (local, or Supabase / Neon / any hosted Postgres).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Copy `.env.example` to `.env.local` and set:
+   - `DATABASE_URL` — your Postgres connection string. On Supabase use **Connect → Session pooler** (port 5432).
+   - `JWT_SECRET` — a long random string.
+2. Install and create the tables:
 
-## Learn More
+   ```bash
+   npm install
+   npm run db:push
+   npm run db:seed     # optional: starter accounts (see below)
+   npm run dev
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. Open http://localhost:3000.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+> Upgrading a Supabase database that ran the earlier Supabase-auth version? Run
+> `prisma/cleanup-old-supabase-schema.sql` once in the SQL Editor before `npm run db:push`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Starter accounts (`npm run db:seed`)
 
-## Deploy on Vercel
+| Role | Email | Password |
+|---|---|---|
+| Manager | `manager@messhisab.com` | `Manager@123` |
+| Member | `member@messhisab.com` | `Member@123` |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Override them with the `SEED_*` variables in `.env.example`, and change the passwords after first sign-in (Profile → Security). Without seeding, the **first account registered becomes the manager** automatically.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## How accounts work
+
+1. A new person registers → their account is **Pending**.
+2. A manager opens **Approvals** (the sidebar shows a badge when someone is waiting) and approves or rejects.
+3. On approval the account is linked to the mess member with the same email (or a new member is created).
+4. Managers can switch anyone between **Manager** and **Member**, suspend/reactivate accounts, and reset passwords. The last manager can't be removed.
+
+## Accounting rules
+
+| | |
+|---|---|
+| Meal rate | Food expense ÷ Total meals |
+| Meal cost | Member meals × Meal rate |
+| Other expense share | Total other expenses ÷ active members |
+| Total cost | Meal cost + House rent + Other share |
+| Balance | Total cost − Paid (positive = **Due**, negative = **Advance**) |
+
+House rent and other expenses never affect the meal rate. The calculation lives in `src/lib/accounting.ts` and is covered by `npm test`.
+
+## Tech
+
+Next.js 16 · React 19 · TypeScript · PostgreSQL + Prisma 7 · jose + bcryptjs auth · Tailwind CSS v4 · shadcn/ui (Base UI) · TanStack Query · React Hook Form + Zod · Recharts · Framer Motion.
