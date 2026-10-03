@@ -1,20 +1,19 @@
 import { redirect } from "next/navigation"
 import { AppGate } from "@/features/mess/app-gate"
-import { getMess } from "@/server/queries"
+import { me } from "@/server/queries"
 import { getSession } from "@/server/session"
-import { db } from "@/server/db"
 
-// Server-side gate: the session must belong to an approved account. The
-// initial user/mess data is passed down so the shell renders without a round trip.
+// Server-side gate for the mess app: approved account → belongs to a mess →
+// mess is ACTIVE. Super admins use /admin. Every query/action re-checks this too.
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getSession()
   if (!user) redirect("/auth/signout?reason=UNAUTHENTICATED")
   if (user.status !== "approved") redirect(`/auth/signout?reason=ACCOUNT_${user.status.toUpperCase()}`)
+  if (user.platform_role === "super_admin") redirect("/admin")
 
-  const [member, mess] = await Promise.all([
-    db.member.findUnique({ where: { user_id: user.id }, select: { id: true, full_name: true, avatar_url: true } }),
-    getMess(),
-  ])
+  const current = await me()
+  if (!current.member || !current.mess) redirect("/welcome")
+  if (current.mess.status !== "active") redirect("/mess-status")
 
-  return <AppGate initialMe={{ user, member, mess }}>{children}</AppGate>
+  return <AppGate initialMe={{ ...current, member: current.member, mess: current.mess }}>{children}</AppGate>
 }

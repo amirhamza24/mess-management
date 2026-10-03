@@ -1,15 +1,16 @@
 # MessHisab
 
-**Smart Mess Management & Monthly Hisab** — manage meals, bazar, house rent, payments, expenses and the monthly mess হিসাব in one place. Built for bachelor, student and job-holder messes in Bangladesh.
+**Smart Mess Management & Monthly Hisab** — a multi-mess platform to manage meals, bazar, house rent, payments, expenses and the monthly mess হিসাব. Built for bachelor, student and job-holder messes in Bangladesh.
 
 ## Features
 
-- **Accounts with manager approval** — anyone can register, but can only sign in after a manager approves them. Managers can make any user a manager or member at any time, suspend accounts and reset passwords.
-- **Two roles** — Manager (full control) and Member (view only), checked on the server for every request.
+- **Multiple isolated messes** — each mess has its own manager, members and data; one mess can never see another's.
+- **Platform admin** — approve or reject new messes, activate/deactivate them, search & filter all messes, view managers, members and activity.
+- **Mess onboarding** — anyone can register and create a mess; it stays *Pending* until an admin approves it.
+- **Join requests** — people can register to join an existing mess; that mess's manager approves them and can make anyone a manager or member.
 - **Monthly cycles** — start a month with the members staying, add/remove members mid-month, close (lock) and reopen months.
-- **Meals** — breakfast/lunch/dinner with half meals, extra/guest indicator, copy previous day, and a full-month matrix.
-- **Bazar & Food**, **House Rent**, **Other Expenses**, **Payments** (cash, bKash, Nagad, bank) — kept as separate accounts.
-- **Monthly হিসাব** — meal rate, rent and other-expense accounts plus each member's final settlement (Due / Advance).
+- **Meals**, **Bazar & Food**, **House Rent**, **Other Expenses**, **Payments** (cash, bKash, Nagad, bank) — kept as separate accounts.
+- **Monthly হিসাব** — meal rate, rent and other-expense accounts plus each member's settlement (Due / Advance).
 - **Reports & PDF**, dashboard charts, বাংলা / English, dark / light mode, mobile layout.
 
 ## Setup
@@ -19,35 +20,29 @@ Requirements: Node.js 20+ and a PostgreSQL database (local, or Supabase / Neon /
 1. Create `.env.local` in the project root with:
    - `DATABASE_URL` — your Postgres connection string. On Supabase use **Connect → Session pooler** (port 5432).
    - `JWT_SECRET` — a long random string.
-2. Install and create the tables:
+2. Install, create the tables and (optionally) seed:
 
    ```bash
    npm install
-   npm run db:push
-   npm run db:seed     # optional: starter accounts (see below)
+   npm run db:migrate
+   npm run db:seed     # optional: platform admin + a demo mess
    npm run dev
    ```
 
-3. Open http://localhost:3000.
+3. Open http://localhost:3000. Without seeding, the **first account registered becomes the platform admin**.
 
-> Upgrading a Supabase database that ran the earlier Supabase-auth version? Run
-> `prisma/cleanup-old-supabase-schema.sql` once in the SQL Editor before `npm run db:push`.
+> A database created by an older version with `prisma db push`: run
+> `npx prisma migrate resolve --applied 0_init` once, then `npm run db:migrate`.
+> The multi-mess migration keeps existing data (it becomes one active mess).
 
-### Starter accounts (`npm run db:seed`)
+## How it works
 
-| Role | Email | Password |
-|---|---|---|
-| Manager | `manager@messhisab.com` | `Manager@123` |
-| Member | `member@messhisab.com` | `Member@123` |
+1. **Create a mess** — register, choose *Create a new mess*, fill in the details and confirm. The mess is *Pending*.
+2. **Admin approval** — a platform admin approves (or rejects with a reason) from *Pending Approvals*. Until then the accounting modules stay locked.
+3. **Members** — others register with *Join an existing mess*; the manager approves them on **Approvals**.
+4. **Inactive messes** — an admin can deactivate a mess; its users immediately lose access until it is reactivated.
 
-Override them with `SEED_MANAGER_EMAIL`, `SEED_MANAGER_PASSWORD`, `SEED_MEMBER_EMAIL`, `SEED_MEMBER_PASSWORD` in `.env.local`, and change the passwords after first sign-in (Profile → Security). Without seeding, the **first account registered becomes the manager** automatically.
-
-## How accounts work
-
-1. A new person registers → their account is **Pending**.
-2. A manager opens **Approvals** (the sidebar shows a badge when someone is waiting) and approves or rejects.
-3. On approval the account is linked to the mess member with the same email (or a new member is created).
-4. Managers can switch anyone between **Manager** and **Member**, suspend/reactivate accounts, and reset passwords. The last manager can't be removed.
+All of this is enforced on the server for every request — not only in the UI.
 
 ## Accounting rules
 

@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { errorKey } from "@/lib/errors"
-import { updateMess } from "@/actions/records"
+import { updateMess } from "@/actions/mess"
 import { errOf } from "@/lib/api"
 import { messSchema } from "@/lib/validation"
 
@@ -28,18 +28,18 @@ export function SettingsPage() {
   const { mess, isManager, refreshMess } = useMess()
   const form = useForm<Values>({
     resolver: zodResolver(messSchema),
-    defaultValues: { name: mess.name, address: mess.address ?? "" },
+    defaultValues: { name: mess.name, address: mess.address, description: mess.description ?? "" },
   })
   const { errors, isSubmitting, isDirty } = form.formState
 
   useEffect(() => {
-    form.reset({ name: mess.name, address: mess.address ?? "" })
+    form.reset({ name: mess.name, address: mess.address, description: mess.description ?? "" })
   }, [mess, form])
 
   const onSubmit = async (values: Values) => {
     const error = errOf(await updateMess(values))
     if (error) return void toast.error(t(errorKey(error)))
-    toast.success(t("settings.saved"))
+    toast.success(t("messes.updatedToast"))
     await refreshMess()
   }
 
@@ -59,8 +59,11 @@ export function SettingsPage() {
             <Field label={t("onboarding.messName")} htmlFor="s-name" error={errors.name?.message}>
               <Input id="s-name" disabled={!isManager} aria-invalid={!!errors.name} {...form.register("name")} />
             </Field>
-            <Field label={t("onboarding.messAddress")} htmlFor="s-address" optional error={errors.address?.message}>
+            <Field label={t("onboarding.messAddress")} htmlFor="s-address" error={errors.address?.message}>
               <Textarea id="s-address" rows={2} disabled={!isManager} {...form.register("address")} />
+            </Field>
+            <Field label={t("messes.description")} htmlFor="s-description" optional error={errors.description?.message}>
+              <Textarea id="s-description" rows={3} disabled={!isManager} {...form.register("description")} />
             </Field>
             {isManager && (
               <Button type="submit" disabled={isSubmitting || !isDirty} className="justify-self-end">

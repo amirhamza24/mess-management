@@ -24,6 +24,13 @@ export type ErrorCode =
   | "ACCOUNT_SUSPENDED"
   | "EMAIL_TAKEN"
   | "WRONG_PASSWORD"
+  | "NO_MESS"
+  | "MESS_PENDING"
+  | "MESS_INACTIVE"
+  | "MESS_REJECTED"
+  | "MESS_NAME_TAKEN"
+  | "ALREADY_IN_MESS"
+  | "MESS_NOT_AVAILABLE"
   | "GENERIC"
 
 export class AppError extends Error {

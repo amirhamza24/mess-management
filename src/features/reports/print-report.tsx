@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/common/error-state"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useCycleSummary } from "@/features/accounts/queries"
-import { MessProvider, useMess, type Me } from "@/features/mess/mess-provider"
+import { MessProvider, useMess, type ActiveMe } from "@/features/mess/mess-provider"
 import type { TKey } from "@/i18n"
 import { todayISO } from "@/lib/format"
 import { ExpenseReportTable, MonthlyReportGrid } from "./report-sections"
@@ -17,7 +17,7 @@ import { ExpenseReportTable, MonthlyReportGrid } from "./report-sections"
  * Printable monthly report. Rendered as HTML and saved as PDF through the
  * browser print dialog, so Bangla text renders correctly with the app's fonts.
  */
-export function PrintReport({ cycleId, initialMe }: { cycleId: string; initialMe: Me }) {
+export function PrintReport({ cycleId, initialMe }: { cycleId: string; initialMe: ActiveMe }) {
   return (
     <MessProvider me={initialMe}>
       <PrintBody cycleId={cycleId} />

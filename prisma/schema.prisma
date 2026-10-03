@@ -9,6 +9,10 @@
 //
 // Field names are snake_case on purpose: query results are sent to the client
 // as-is (after Decimal/Date serialisation) and match src/lib/types.ts.
+//
+// Multi-tenant: every mess is isolated. Monthly data hangs off a MonthlyCycle
+// which belongs to exactly one Mess; members belong to exactly one Mess.
+// All scoping/authorisation happens server-side (src/server/context.ts).
 
 generator client {
   provider = "prisma-client-js"
@@ -18,17 +22,32 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Platform-level role. Super admins manage messes; they never belong to a mess.
+enum PlatformRole {
+  super_admin
+  user
+}
+
+/// Role inside a mess (on Member).
 enum Role {
   manager
   member
 }
 
-/// Every registration starts as `pending`; only `approved` users can sign in.
+/// Account status. `pending` = waiting for the requested mess's manager to approve the join request.
 enum UserStatus {
   pending
   approved
   rejected
   suspended
+}
+
+/// pending → (super admin) → active | rejected; active ⇄ inactive.
+enum MessStatus {
+  pending
+  active
+  inactive
+  rejected
 }
 
 enum MemberStatus {
@@ -89,42 +108,88 @@ enum OtherCategory {
   miscellaneous
 }
 
-/// App account. Approval and role are managed by managers.
+/// App account.
 model User {
-  id          String     @id @default(uuid())
-  name        String
-  email       String     @unique
-  phone       String?
-  password    String
-  role        Role       @default(member)
-  status      UserStatus @default(pending)
-  approved_at DateTime?
-  approved_by String?
-  created_at  DateTime   @default(now())
-  updated_at  DateTime   @updatedAt
+  id                String       @id @default(uuid())
+  name              String
+  email             String       @unique
+  phone             String?
+  password          String
+  platform_role     PlatformRole @default(user)
+  status            UserStatus   @default(pending)
+  /// Mess a pending user asked to join (approved by that mess's manager).
+  requested_mess_id String?
+  approved_at       DateTime?
+  approved_by       String?
+  created_at        DateTime     @default(now())
+  updated_at        DateTime     @updatedAt
 
-  member Member?
+  member          Member?
+  requested_mess  Mess?   @relation("JoinRequests", fields: [requested_mess_id], references: [id], onDelete: SetNull)
+  created_messes  Mess[]  @relation("MessCreator")
+  approved_messes Mess[]  @relation("MessApprover")
+  rejected_messes Mess[]  @relation("MessRejecter")
 
   @@index([status])
+  @@index([requested_mess_id])
   @@map("users")
 }
 
-/// Single-row table with the mess's own details (id is always "main").
 model Mess {
-  id         String   @id @default("main")
-  name       String
-  address    String?
-  updated_at DateTime @updatedAt
+  id               String     @id @default(uuid())
+  name             String
+  /// Lower-cased, whitespace-collapsed name: enforces case-insensitive uniqueness in the database.
+  name_key         String     @unique
+  slug             String     @unique
+  address          String
+  description      String?
+  status           MessStatus @default(pending)
+  created_by       String
+  approved_by      String?
+  approved_at      DateTime?
+  rejected_by      String?
+  rejected_at      DateTime?
+  rejection_reason String?
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
 
-  @@map("mess")
+  creator       User           @relation("MessCreator", fields: [created_by], references: [id], onDelete: Restrict)
+  approver      User?          @relation("MessApprover", fields: [approved_by], references: [id], onDelete: SetNull)
+  rejecter      User?          @relation("MessRejecter", fields: [rejected_by], references: [id], onDelete: SetNull)
+  members       Member[]
+  cycles        MonthlyCycle[]
+  join_requests User[]         @relation("JoinRequests")
+  activities    MessActivity[]
+
+  @@index([status, created_at])
+  @@map("messes")
 }
 
-/// A person living in the mess. May exist without an app account (user_id null).
+/// Platform-level audit trail for a mess (shown to super admins).
+model MessActivity {
+  id         String   @id @default(uuid())
+  mess_id    String
+  actor_id   String?
+  actor_name String
+  action     String
+  note       String?
+  created_at DateTime @default(now())
+
+  mess Mess @relation(fields: [mess_id], references: [id], onDelete: Cascade)
+
+  @@index([mess_id, created_at])
+  @@map("mess_activities")
+}
+
+/// Membership of a person in a mess (the "MessMember"). May exist without an
+/// app account (user_id null). A user belongs to at most one mess.
 model Member {
   id         String       @id @default(uuid())
+  mess_id    String
   user_id    String?      @unique
+  role       Role         @default(member)
   full_name  String
-  email      String?      @unique
+  email      String?
   phone      String?
   avatar_url String?
   status     MemberStatus @default(active)
@@ -133,6 +198,7 @@ model Member {
   created_at DateTime     @default(now())
   updated_at DateTime     @updatedAt
 
+  mess            Mess            @relation(fields: [mess_id], references: [id], onDelete: Cascade)
   user            User?           @relation(fields: [user_id], references: [id], onDelete: SetNull)
   monthly_members MonthlyMember[]
   meals           Meal[]
@@ -141,18 +207,23 @@ model Member {
   food_paid       FoodExpense[]
   other_paid      OtherExpense[]
 
+  @@unique([mess_id, user_id])
+  @@unique([mess_id, email])
+  @@index([mess_id, role])
   @@map("members")
 }
 
 /// One accounting month. Closed months are read-only.
 model MonthlyCycle {
   id         String      @id @default(uuid())
+  mess_id    String
   year       Int
   month      Int
   status     CycleStatus @default(open)
   started_at DateTime    @default(now())
   closed_at  DateTime?
 
+  mess            Mess            @relation(fields: [mess_id], references: [id], onDelete: Cascade)
   monthly_members MonthlyMember[]
   meals           Meal[]
   food_expenses   FoodExpense[]
@@ -160,7 +231,7 @@ model MonthlyCycle {
   house_rents     HouseRent[]
   other_expenses  OtherExpense[]
 
-  @@unique([year, month])
+  @@unique([mess_id, year, month])
   @@map("monthly_cycles")
 }
 

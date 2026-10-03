@@ -26,11 +26,17 @@ export async function query<K extends keyof Queries>(name: K, ...args: Parameter
   const body = (await res.json().catch(() => null)) as ActionResult<QueryResult<K>> | null
   if (!body) throw new ApiError("GENERIC")
   if (!body.ok) {
+    // Full navigations: the session/mess state changed underneath the page.
+    /* eslint-disable @next/next/no-location-assign-relative-destination */
     if (body.error === "UNAUTHENTICATED" || body.error.startsWith("ACCOUNT_")) {
-      // Full navigation: the route handler must clear the httpOnly session cookie.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      // The route handler must clear the httpOnly session cookie.
       window.location.assign(`/auth/signout?reason=${body.error}`)
+    } else if (body.error.startsWith("MESS_") && body.error !== "MESS_NAME_TAKEN" && body.error !== "MESS_NOT_AVAILABLE") {
+      window.location.assign("/mess-status")
+    } else if (body.error === "NO_MESS") {
+      window.location.assign("/welcome")
     }
+    /* eslint-enable @next/next/no-location-assign-relative-destination */
     throw new ApiError(body.error)
   }
   return body.data
@@ -48,7 +54,18 @@ export async function mutate<T>(promise: Promise<ActionResult<T>>): Promise<T> {
   return result.data
 }
 
-/** Error code of a Server Action result, or null on success. */
+const BLOCKED_MESS = new Set(["MESS_PENDING", "MESS_INACTIVE", "MESS_REJECTED"])
+
+/**
+ * Error code of a Server Action result, or null on success. When the mess was
+ * blocked meanwhile (e.g. deactivated), callers still toast the message and the
+ * page then moves to the mess status screen.
+ */
 export function errOf(result: ActionResult<unknown>) {
-  return result.ok ? null : result.error
+  if (result.ok) return null
+  if (typeof window !== "undefined" && BLOCKED_MESS.has(result.error)) {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.setTimeout(() => window.location.assign("/mess-status"), 1800)
+  }
+  return result.error
 }

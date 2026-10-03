@@ -18,9 +18,89 @@ type Num = number | string
 
 export type UserStatus = "pending" | "approved" | "rejected" | "suspended"
 
+export type MessStatus = "pending" | "active" | "inactive" | "rejected"
+export type PlatformRole = "super_admin" | "user"
+
 export interface Mess {
+  id: string
   name: string
-  address: string | null
+  address: string
+  description: string | null
+}
+
+/** The signed-in user's mess with its lifecycle details (status pages). */
+export interface MyMess extends Mess {
+  status: MessStatus
+  created_at: string
+  rejection_reason: string | null
+  rejected_at: string | null
+  /** True when the signed-in user created this mess. */
+  is_creator: boolean
+}
+
+// ---- Platform admin -----------------------------------------------------
+
+export interface AdminStats {
+  total: number
+  active: number
+  inactive: number
+  pending: number
+  rejected: number
+  managers: number
+  members: number
+}
+
+export interface AdminMessRow {
+  id: string
+  name: string
+  address: string
+  status: MessStatus
+  created_at: string
+  manager: { name: string; email: string | null } | null
+  member_count: number
+}
+
+export interface AdminPerson {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  role: MemberRole
+  member_status: MemberStatus
+  account_status: UserStatus | null
+  joined_at: string
+}
+
+export interface AdminActivity {
+  id: string
+  actor_name: string
+  action: string
+  note: string | null
+  created_at: string
+}
+
+export interface AdminMessDetails extends Mess {
+  status: MessStatus
+  slug: string
+  created_at: string
+  updated_at: string
+  approved_at: string | null
+  approved_by_name: string | null
+  rejected_at: string | null
+  rejected_by_name: string | null
+  rejection_reason: string | null
+  creator: { name: string; email: string }
+  managers: AdminPerson[]
+  members: AdminPerson[]
+  activities: AdminActivity[]
+}
+
+export interface AdminMessFilters {
+  q?: string
+  status?: MessStatus | ""
+  /** Inclusive YYYY-MM-DD range on the creation date. */
+  from?: string
+  to?: string
 }
 
 /** App account, as listed on the approvals page (managers only). */

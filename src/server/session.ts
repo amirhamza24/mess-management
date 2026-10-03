@@ -65,7 +65,7 @@ export interface SessionUser {
   name: string
   email: string
   phone: string | null
-  role: "manager" | "member"
+  platform_role: "super_admin" | "user"
   status: "pending" | "approved" | "rejected" | "suspended"
 }
 
@@ -79,7 +79,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
   if (!userId) return null
   return db.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, phone: true, role: true, status: true },
+    select: { id: true, name: true, email: true, phone: true, platform_role: true, status: true },
   })
 })
 
@@ -92,14 +92,8 @@ export async function requireUser() {
   return user
 }
 
-export async function requireManager() {
+export async function requireSuperAdmin() {
   const user = await requireUser()
-  if (user.role !== "manager") throw new AppError("FORBIDDEN")
+  if (user.platform_role !== "super_admin") throw new AppError("FORBIDDEN")
   return user
 }
-
-/** The mess member record linked to the signed-in user (null if none). */
-export const getMyMemberId = cache(async (userId: string) => {
-  const member = await db.member.findUnique({ where: { user_id: userId }, select: { id: true } })
-  return member?.id ?? null
-})

@@ -1,12 +1,12 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Hourglass, Loader2 } from "lucide-react"
+import { Building2, Hourglass, Loader2, UserPlus } from "lucide-react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import type { z } from "zod"
 import { Field } from "@/components/common/field"
@@ -17,7 +17,9 @@ import { useI18n } from "@/components/providers/i18n-provider"
 import { register } from "@/actions/auth"
 import { errorKey } from "@/lib/errors"
 import { registerSchema } from "@/lib/validation"
+import { cn } from "@/lib/utils"
 import { AuthCard } from "./auth-shell"
+import { MessPicker } from "./mess-picker"
 
 type Values = z.infer<typeof registerSchema>
 
@@ -28,7 +30,7 @@ export function RegisterForm() {
 
   const form = useForm<Values>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: "", email: "", phone: "", password: "", confirmPassword: "" },
+    defaultValues: { fullName: "", email: "", phone: "", password: "", confirmPassword: "", intent: "create", messId: "" },
   })
   const { errors, isSubmitting } = form.formState
 
@@ -38,15 +40,21 @@ export function RegisterForm() {
       toast.error(t(errorKey(result.error)))
       return
     }
-    // The very first account is the manager and is signed in straight away.
+    // Creating a mess (or the platform's first account): signed in straight away.
     if (result.data.status === "approved") {
       toast.success(t("auth.registerSuccessNoConfirm"))
-      router.replace("/dashboard")
+      router.replace(result.data.platform_role === "super_admin" ? "/admin" : "/welcome")
       router.refresh()
       return
     }
     setSentTo(values.email)
   }
+
+  const intent = useWatch({ control: form.control, name: "intent" })
+  const intents = [
+    { value: "create" as const, icon: Building2, title: t("auth.intentCreate"), desc: t("auth.intentCreateDesc") },
+    { value: "join" as const, icon: UserPlus, title: t("auth.intentJoin"), desc: t("auth.intentJoinDesc") },
+  ]
 
   if (sentTo) {
     return (
@@ -116,6 +124,58 @@ export function RegisterForm() {
             />
           </Field>
         </div>
+        <Field label={t("auth.intentLabel")}>
+          <Controller
+            control={form.control}
+            name="intent"
+            render={({ field }) => (
+              <div role="radiogroup" aria-label={t("auth.intentLabel")} className="grid gap-2 sm:grid-cols-2">
+                {intents.map((o) => {
+                  const active = field.value === o.value
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => field.onChange(o.value)}
+                      className={cn(
+                        "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
+                        active ? "border-primary bg-accent/60 shadow-xs" : "hover:border-foreground/20 hover:bg-muted/50"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                          active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <o.icon className="size-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{o.title}</span>
+                        <span className="block text-xs text-muted-foreground">{o.desc}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          />
+        </Field>
+        {intent === "join" && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
+            <Field label={t("auth.chooseMess")} htmlFor="messId" error={errors.messId?.message}>
+              <Controller
+                control={form.control}
+                name="messId"
+                render={({ field }) => (
+                  <MessPicker id="messId" value={field.value} onChange={field.onChange} invalid={!!errors.messId} />
+                )}
+              />
+            </Field>
+          </motion.div>
+        )}
         <Field label={t("auth.password")} htmlFor="password" error={errors.password?.message}>
           <PasswordInput
             id="password"

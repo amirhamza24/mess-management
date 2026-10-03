@@ -59,10 +59,17 @@ export const registerSchema = z
     phone: phoneSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, "validation.required"),
+    /** "create": set up a new mess after signing up; "join": ask an existing mess's manager. */
+    intent: z.enum(["create", "join"]),
+    messId: z.string(),
   })
   .refine((v) => v.password === v.confirmPassword, {
     path: ["confirmPassword"],
     message: "validation.passwordMatch",
+  })
+  .refine((v) => v.intent !== "join" || v.messId.length > 0, {
+    path: ["messId"],
+    message: "validation.chooseMess",
   })
 
 export const forgotSchema = z.object({ email: emailSchema })
@@ -80,9 +87,12 @@ export const resetSchema = z
 // ---- Mess / members -----------------------------------------------------
 
 export const messSchema = z.object({
-  name: text().min(2, "validation.nameMin"),
-  address: optionalText(300),
+  name: text(80).min(3, "validation.messNameMin"),
+  address: text(300).min(5, "validation.addressMin"),
+  description: optionalText(500),
 })
+
+export const rejectMessSchema = z.object({ reason: optionalText(500) })
 
 export const memberSchema = z.object({
   full_name: text().min(2, "validation.nameMin"),

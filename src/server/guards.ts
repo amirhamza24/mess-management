@@ -4,9 +4,9 @@ import { db } from "./db"
 import { AppError } from "./errors"
 import { monthRange } from "./serialize"
 
-/** Monthly records may only change while their month is open. */
-export async function openCycle(cycleId: string) {
-  const cycle = await db.monthlyCycle.findUnique({ where: { id: cycleId } })
+/** Monthly records may only change while their month is open — and only in the caller's own mess. */
+export async function openCycle(cycleId: string, messId: string) {
+  const cycle = await db.monthlyCycle.findFirst({ where: { id: cycleId, mess_id: messId } })
   if (!cycle) throw new AppError("NOT_FOUND")
   if (cycle.status === "closed") throw new AppError("MONTH_CLOSED")
   return cycle
@@ -31,10 +31,15 @@ export function parse<S extends z.ZodType>(schema: S, values: unknown): z.output
   return result.data
 }
 
-/** A mess must always keep at least one approved manager. */
-export async function assertNotLastManager(userId: string) {
-  const others = await db.user.count({
-    where: { id: { not: userId }, role: "manager", status: "approved" },
+/** A mess must always keep at least one manager with an approved account. */
+export async function assertNotLastManager(messId: string, exceptMemberId: string) {
+  const others = await db.member.count({
+    where: {
+      mess_id: messId,
+      id: { not: exceptMemberId },
+      role: "manager",
+      user: { status: "approved" },
+    },
   })
   if (others === 0) throw new AppError("LAST_MANAGER")
 }

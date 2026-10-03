@@ -4,22 +4,26 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { query } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
-import type { Mess, MemberRole, MonthlyCycle, RosterMember, UserStatus } from "@/lib/types"
+import type { MemberRole, MonthlyCycle, MyMess, PlatformRole, RosterMember, UserStatus } from "@/lib/types"
 
 export interface Me {
-  user: { id: string; name: string; email: string; phone: string | null; role: MemberRole; status: UserStatus }
-  /** Mess member record linked to this account (null if none, e.g. removed by a manager). */
-  member: { id: string; full_name: string; avatar_url: string | null } | null
-  mess: Mess
+  user: { id: string; name: string; email: string; phone: string | null; platform_role: PlatformRole; status: UserStatus }
+  /** The user's membership in their mess (null when they don't belong to a mess yet). */
+  member: { id: string; role: MemberRole; full_name: string; avatar_url: string | null } | null
+  /** The user's mess with its status (null when none). */
+  mess: MyMess | null
 }
 
+/** Me inside the app shell: the mess is guaranteed to exist and be active (checked by the server layout). */
+export type ActiveMe = Me & { member: NonNullable<Me["member"]>; mess: MyMess }
+
 /** Signed-in user + mess. Seeded from the server layout, refreshed after profile/role changes. */
-export function useMe(initialMe: Me) {
+export function useMe<T extends Me>(initialMe: T) {
   return useQuery({
     queryKey: qk.me,
     staleTime: 5 * 60_000,
     initialData: initialMe,
-    queryFn: () => query("me"),
+    queryFn: () => query("me") as Promise<T>,
   })
 }
 
@@ -29,8 +33,8 @@ export interface Period {
 }
 
 interface MessContextValue {
-  me: Me
-  mess: Mess
+  me: ActiveMe
+  mess: MyMess
   /** Member id of the signed-in user ("" when not linked to a member). */
   memberId: string
   isManager: boolean
@@ -56,9 +60,9 @@ function currentPeriod(): Period {
   return { year: d.getFullYear(), month: d.getMonth() + 1 }
 }
 
-export function MessProvider({ me, children }: { me: Me; children: React.ReactNode }) {
+export function MessProvider({ me, children }: { me: ActiveMe; children: React.ReactNode }) {
   const queryClient = useQueryClient()
-  const isManager = me.user.role === "manager"
+  const isManager = me.member.role === "manager"
   const [period, setPeriod] = useState<Period>(currentPeriod)
 
   const cyclesQuery = useQuery({ queryKey: qk.cycles, queryFn: () => query("cycles") })
@@ -85,7 +89,7 @@ export function MessProvider({ me, children }: { me: Me; children: React.ReactNo
     return {
       me,
       mess: me.mess,
-      memberId: me.member?.id ?? "",
+      memberId: me.member.id,
       isManager,
       displayName: me.user.name || me.member?.full_name || me.user.email,
       cycles,

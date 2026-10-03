@@ -5,11 +5,10 @@ import { db } from "@/server/db"
 import { run } from "@/server/errors"
 import { assertDateInCycle, assertMembersInCycle, nullIfEmpty, openCycle, parse } from "@/server/guards"
 import { toDbDate } from "@/server/serialize"
-import { requireManager } from "@/server/session"
+import { requireMessManager } from "@/server/context"
 import {
   foodExpenseSchema,
   isValidMealValue,
-  messSchema,
   nonNegativeAmountSchema,
   otherExpenseSchema,
   paymentSchema,
@@ -30,9 +29,9 @@ const dayMealsSchema = z.object({
 /** Saves one day's meals. All-zero entries remove that member's record for the day. */
 export async function saveDayMeals(cycleId: string, values: z.input<typeof dayMealsSchema>) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const { date, entries } = parse(dayMealsSchema, values)
-    const cycle = await openCycle(cycleId)
+    const cycle = await openCycle(cycleId, ctx.mess.id)
     assertDateInCycle(cycle, date)
     await assertMembersInCycle(cycleId, entries.map((e) => e.member_id))
     const day = toDbDate(date)
@@ -64,9 +63,9 @@ export async function saveExpense(
   id?: string
 ) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const data = kind === "food" ? parse(foodExpenseSchema, values) : parse(otherExpenseSchema, values)
-    const cycle = await openCycle(cycleId)
+    const cycle = await openCycle(cycleId, ctx.mess.id)
     assertDateInCycle(cycle, data.date)
     const paidBy = nullIfEmpty(data.paid_by)
     await assertMembersInCycle(cycleId, [paidBy])
@@ -80,13 +79,13 @@ export async function saveExpense(
     if (kind === "food") {
       const category = data.category as z.output<typeof foodExpenseSchema>["category"]
       if (id) {
-        await openCycle((await db.foodExpense.findUniqueOrThrow({ where: { id } })).monthly_cycle_id)
+        await openCycle((await db.foodExpense.findUniqueOrThrow({ where: { id } })).monthly_cycle_id, ctx.mess.id)
         await db.foodExpense.update({ where: { id }, data: { ...row, category, monthly_cycle_id: cycleId } })
       } else await db.foodExpense.create({ data: { ...row, category, monthly_cycle_id: cycleId } })
     } else {
       const category = data.category as z.output<typeof otherExpenseSchema>["category"]
       if (id) {
-        await openCycle((await db.otherExpense.findUniqueOrThrow({ where: { id } })).monthly_cycle_id)
+        await openCycle((await db.otherExpense.findUniqueOrThrow({ where: { id } })).monthly_cycle_id, ctx.mess.id)
         await db.otherExpense.update({ where: { id }, data: { ...row, category, monthly_cycle_id: cycleId } })
       } else await db.otherExpense.create({ data: { ...row, category, monthly_cycle_id: cycleId } })
     }
@@ -96,14 +95,14 @@ export async function saveExpense(
 
 export async function deleteExpense(kind: "food" | "other", id: string) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     if (kind === "food") {
       const row = await db.foodExpense.findUniqueOrThrow({ where: { id } })
-      await openCycle(row.monthly_cycle_id)
+      await openCycle(row.monthly_cycle_id, ctx.mess.id)
       await db.foodExpense.delete({ where: { id } })
     } else {
       const row = await db.otherExpense.findUniqueOrThrow({ where: { id } })
-      await openCycle(row.monthly_cycle_id)
+      await openCycle(row.monthly_cycle_id, ctx.mess.id)
       await db.otherExpense.delete({ where: { id } })
     }
     return null
@@ -114,9 +113,9 @@ export async function deleteExpense(kind: "food" | "other", id: string) {
 
 export async function savePayment(cycleId: string, values: z.input<typeof paymentSchema>, id?: string) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const data = parse(paymentSchema, values)
-    const cycle = await openCycle(cycleId)
+    const cycle = await openCycle(cycleId, ctx.mess.id)
     assertDateInCycle(cycle, data.date)
     await assertMembersInCycle(cycleId, [data.member_id])
     const row = {
@@ -128,7 +127,7 @@ export async function savePayment(cycleId: string, values: z.input<typeof paymen
       note: nullIfEmpty(data.note),
     }
     if (id) {
-      await openCycle((await db.payment.findUniqueOrThrow({ where: { id } })).monthly_cycle_id)
+      await openCycle((await db.payment.findUniqueOrThrow({ where: { id } })).monthly_cycle_id, ctx.mess.id)
       await db.payment.update({ where: { id }, data: { ...row, monthly_cycle_id: cycleId } })
     } else {
       await db.payment.create({ data: { ...row, monthly_cycle_id: cycleId } })
@@ -139,9 +138,9 @@ export async function savePayment(cycleId: string, values: z.input<typeof paymen
 
 export async function deletePayment(id: string) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const row = await db.payment.findUniqueOrThrow({ where: { id } })
-    await openCycle(row.monthly_cycle_id)
+    await openCycle(row.monthly_cycle_id, ctx.mess.id)
     await db.payment.delete({ where: { id } })
     return null
   })
@@ -151,10 +150,10 @@ export async function deletePayment(id: string) {
 
 export async function updateRent(rentId: string, values: z.input<typeof rentSchema>) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const data = parse(rentSchema, values)
     const rent = await db.houseRent.findUniqueOrThrow({ where: { id: rentId } })
-    await openCycle(rent.monthly_cycle_id)
+    await openCycle(rent.monthly_cycle_id, ctx.mess.id)
     await db.houseRent.update({ where: { id: rentId }, data: { amount: data.amount, note: nullIfEmpty(data.note) } })
     return null
   })
@@ -162,22 +161,11 @@ export async function updateRent(rentId: string, values: z.input<typeof rentSche
 
 export async function setAllRent(cycleId: string, amount: number | string) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const { a } = parse(z.object({ a: nonNegativeAmountSchema }), { a: amount })
-    await openCycle(cycleId)
+    await openCycle(cycleId, ctx.mess.id)
     await db.houseRent.updateMany({ where: { monthly_cycle_id: cycleId }, data: { amount: a } })
     return null
   })
 }
 
-// ---- Mess settings --------------------------------------------------------
-
-export async function updateMess(values: z.input<typeof messSchema>) {
-  return run(async () => {
-    await requireManager()
-    const data = parse(messSchema, values)
-    const row = { name: data.name, address: nullIfEmpty(data.address) }
-    await db.mess.upsert({ where: { id: "main" }, create: row, update: row })
-    return null
-  })
-}

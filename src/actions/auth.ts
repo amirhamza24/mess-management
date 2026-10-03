@@ -4,7 +4,6 @@ import { z } from "zod"
 import { db } from "@/server/db"
 import { AppError, run } from "@/server/errors"
 import { nullIfEmpty, parse } from "@/server/guards"
-import { DEFAULT_MESS_NAME } from "@/server/queries"
 import { endSession, hashPassword, requireUser, startSession, verifyPassword } from "@/server/session"
 import { loginSchema, passwordSchema, profileSchema, registerSchema } from "@/lib/validation"
 
@@ -21,13 +20,16 @@ export async function login(values: z.input<typeof loginSchema>) {
     if (user.status === "rejected") throw new AppError("ACCOUNT_REJECTED")
     if (user.status === "suspended") throw new AppError("ACCOUNT_SUSPENDED")
     await startSession(user.id, remember)
-    return { role: user.role }
+    return { platform_role: user.platform_role }
   })
 }
 
 /**
- * Register. The very first account becomes the approved manager (bootstrap);
- * everyone after that waits as `pending` until a manager approves them.
+ * Register.
+ * - The very first account on a fresh install becomes the platform super admin.
+ * - "create": the account is active right away so the person can set up a new
+ *   mess (which a super admin then approves).
+ * - "join": the account waits as `pending` until the chosen mess's manager approves it.
  */
 export async function register(values: z.input<typeof registerSchema>) {
   return run(async () => {
@@ -36,30 +38,28 @@ export async function register(values: z.input<typeof registerSchema>) {
     if (await db.user.findUnique({ where: { email } })) throw new AppError("EMAIL_TAKEN")
 
     const isFirst = (await db.user.count()) === 0
-    const user = await db.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          name: data.fullName,
-          email,
-          phone: data.phone,
-          password: hashPassword(data.password),
-          role: isFirst ? "manager" : "member",
-          status: isFirst ? "approved" : "pending",
-          approved_at: isFirst ? new Date() : null,
-          approved_by: isFirst ? "System" : null,
-        },
-      })
-      if (isFirst) {
-        await tx.mess.upsert({ where: { id: "main" }, create: { name: DEFAULT_MESS_NAME }, update: {} })
-        await tx.member.create({
-          data: { user_id: created.id, full_name: data.fullName, email, phone: data.phone },
-        })
-      }
-      return created
+    const joining = !isFirst && data.intent === "join"
+    if (joining) {
+      const mess = await db.mess.findFirst({ where: { id: data.messId, status: "active" }, select: { id: true } })
+      if (!mess) throw new AppError("MESS_NOT_AVAILABLE")
+    }
+
+    const user = await db.user.create({
+      data: {
+        name: data.fullName,
+        email,
+        phone: data.phone,
+        password: hashPassword(data.password),
+        platform_role: isFirst ? "super_admin" : "user",
+        status: joining ? "pending" : "approved",
+        requested_mess_id: joining ? data.messId : null,
+        approved_at: joining ? null : new Date(),
+        approved_by: joining ? null : "System",
+      },
     })
 
-    if (isFirst) await startSession(user.id, true)
-    return { status: user.status }
+    if (!joining) await startSession(user.id, true)
+    return { status: user.status, platform_role: user.platform_role }
   })
 }
 

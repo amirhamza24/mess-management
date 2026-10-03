@@ -6,85 +6,98 @@ import type {
   FoodExpense,
   HouseRent,
   Meal,
-  Mess,
   MessMember,
   MonthlyCycle,
   MonthlyMember,
+  MyMess,
   OtherExpense,
   Payment,
   RosterMember,
 } from "@/lib/types"
+import { adminQueries } from "./admin-queries"
+import { cycleOfMess, getMembership, requireMess, requireMessManager } from "./context"
 import { db } from "./db"
-import { AppError } from "./errors"
 import { serialize } from "./serialize"
-import { getMyMemberId, requireManager, requireUser } from "./session"
+import { getSession, requireUser } from "./session"
 
 // Every read used by the client goes through these functions (exposed via
-// /api/query/[name]). Each one authorises the caller itself: members only see
-// their own payments, rent and settlement row; contact details are manager-only.
+// /api/query/[name]). Each one authorises the caller itself and scopes data to
+// the caller's own mess: ids sent by the client are only used after checking
+// they belong to that mess. Members only see their own payments, rent and
+// settlement row; contact details are manager-only.
 
-export const DEFAULT_MESS_NAME = "My Mess"
-
-export async function getMess(): Promise<Mess> {
-  const mess = await db.mess.findUnique({ where: { id: "main" } })
-  return { name: mess?.name ?? DEFAULT_MESS_NAME, address: mess?.address ?? null }
-}
-
-async function me() {
+/** Signed-in user, their membership and their mess (any status — used for status screens). */
+export async function me() {
   const user = await requireUser()
-  const [member, mess] = await Promise.all([
-    db.member.findUnique({ where: { user_id: user.id } }),
-    getMess(),
-  ])
+  const membership = user.platform_role === "super_admin" ? null : await getMembership(user.id)
+  const mess: MyMess | null = membership
+    ? {
+        ...serialize({
+          id: membership.mess.id,
+          name: membership.mess.name,
+          address: membership.mess.address,
+          description: membership.mess.description,
+          status: membership.mess.status,
+          created_at: membership.mess.created_at,
+          rejection_reason: membership.mess.rejection_reason,
+          rejected_at: membership.mess.rejected_at,
+        }),
+        is_creator: membership.mess.created_by === user.id,
+      }
+    : null
   return {
     user,
-    member: member ? serialize({ id: member.id, full_name: member.full_name, avatar_url: member.avatar_url }) : null,
+    member: membership
+      ? { id: membership.id, role: membership.role, full_name: membership.full_name, avatar_url: membership.avatar_url }
+      : null,
     mess,
   }
 }
 
 async function cycles(): Promise<MonthlyCycle[]> {
-  await requireUser()
-  const rows = await db.monthlyCycle.findMany({ orderBy: [{ year: "desc" }, { month: "desc" }] })
+  const { mess } = await requireMess()
+  const rows = await db.monthlyCycle.findMany({
+    where: { mess_id: mess.id },
+    omit: { mess_id: true },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+  })
   return serialize(rows)
 }
 
 async function roster(): Promise<RosterMember[]> {
-  await requireUser()
+  const { mess } = await requireMess()
   const rows = await db.member.findMany({
-    select: { id: true, full_name: true, avatar_url: true, status: true, joined_at: true, user: { select: { role: true } } },
+    where: { mess_id: mess.id },
+    select: { id: true, full_name: true, avatar_url: true, status: true, joined_at: true, role: true },
     orderBy: { full_name: "asc" },
   })
-  return rows.map(({ user, ...m }) => ({ ...serialize(m), role: user?.role ?? "member" }))
+  return serialize(rows)
 }
 
 async function members(): Promise<MessMember[]> {
-  const user = await requireUser()
+  const { mess, user, isManager } = await requireMess()
   const rows = await db.member.findMany({
     // Members only get their own record (with contact details).
-    where: user.role === "manager" ? {} : { user_id: user.id },
-    omit: { created_at: true, updated_at: true },
-    include: { user: { select: { role: true, status: true } } },
+    where: isManager ? { mess_id: mess.id } : { mess_id: mess.id, user_id: user.id },
+    omit: { created_at: true, updated_at: true, mess_id: true },
+    include: { user: { select: { status: true } } },
     orderBy: { full_name: "asc" },
   })
-  return rows.map(({ user: account, ...m }) => ({
-    ...serialize(m),
-    role: account?.role ?? "member",
-    account_status: account?.status ?? null,
-  }))
+  return rows.map(({ user: account, ...m }) => ({ ...serialize(m), account_status: account?.status ?? null }))
 }
 
 async function monthlyMembers(cycleId: string): Promise<MonthlyMember[]> {
-  await requireUser()
-  const rows = await db.monthlyMember.findMany({
+  const { mess } = await requireMess()
+  await cycleOfMess(cycleId, mess.id)
+  return db.monthlyMember.findMany({
     where: { monthly_cycle_id: cycleId },
     select: { id: true, monthly_cycle_id: true, member_id: true, status: true },
   })
-  return rows
 }
 
 async function meals(cycleId: string): Promise<Meal[]> {
-  await requireUser()
+  const { mess } = await requireMess()
+  await cycleOfMess(cycleId, mess.id)
   const rows = await db.meal.findMany({
     where: { monthly_cycle_id: cycleId },
     select: { id: true, monthly_cycle_id: true, member_id: true, date: true, breakfast: true, lunch: true, dinner: true },
@@ -94,7 +107,8 @@ async function meals(cycleId: string): Promise<Meal[]> {
 }
 
 async function expenses(kind: "food" | "other", cycleId: string): Promise<(FoodExpense | OtherExpense)[]> {
-  await requireUser()
+  const { mess } = await requireMess()
+  await cycleOfMess(cycleId, mess.id)
   const args = {
     where: { monthly_cycle_id: cycleId },
     orderBy: [{ date: "desc" as const }, { created_at: "desc" as const }],
@@ -107,12 +121,10 @@ async function payments(
   cycleId: string,
   opts: { page: number; memberId?: string; pageSize: number }
 ): Promise<{ rows: Payment[]; count: number; pageSize: number }> {
-  const user = await requireUser()
+  const ctx = await requireMess()
+  await cycleOfMess(cycleId, ctx.mess.id)
   const size = Math.min(Math.max(opts.pageSize, 1), 100)
-  let memberId = opts.memberId
-  if (user.role !== "manager") {
-    memberId = (await getMyMemberId(user.id)) ?? "__none__"
-  }
+  const memberId = ctx.isManager ? opts.memberId : ctx.member.id
   const where = { monthly_cycle_id: cycleId, ...(memberId ? { member_id: memberId } : {}) }
   const [rows, count] = await Promise.all([
     db.payment.findMany({
@@ -127,10 +139,10 @@ async function payments(
 }
 
 async function rents(cycleId: string): Promise<HouseRent[]> {
-  const user = await requireUser()
-  const memberId = user.role === "manager" ? undefined : ((await getMyMemberId(user.id)) ?? "__none__")
+  const ctx = await requireMess()
+  await cycleOfMess(cycleId, ctx.mess.id)
   const rows = await db.houseRent.findMany({
-    where: { monthly_cycle_id: cycleId, ...(memberId ? { member_id: memberId } : {}) },
+    where: { monthly_cycle_id: cycleId, ...(ctx.isManager ? {} : { member_id: ctx.member.id }) },
     select: { id: true, monthly_cycle_id: true, member_id: true, amount: true, note: true },
   })
   return serialize(rows)
@@ -138,12 +150,11 @@ async function rents(cycleId: string): Promise<HouseRent[]> {
 
 /** Full monthly accounting. Aggregates are visible to all; per-member rows only to managers (others get their own). */
 async function cycleSummary(cycleId: string): Promise<CycleSummary> {
-  const user = await requireUser()
-  const cycle = await db.monthlyCycle.findUnique({ where: { id: cycleId }, select: { id: true } })
-  if (!cycle) throw new AppError("NOT_FOUND")
+  const ctx = await requireMess()
+  await cycleOfMess(cycleId, ctx.mess.id)
   const where = { monthly_cycle_id: cycleId }
 
-  const [mm, mealSums, rentRows, paySums, foodCats, otherCats, myMemberId] = await Promise.all([
+  const [mm, mealSums, rentRows, paySums, foodCats, otherCats] = await Promise.all([
     db.monthlyMember.findMany({
       where,
       select: { member_id: true, status: true, member: { select: { full_name: true, avatar_url: true } } },
@@ -153,7 +164,6 @@ async function cycleSummary(cycleId: string): Promise<CycleSummary> {
     db.payment.groupBy({ by: ["member_id", "purpose"], where, _sum: { amount: true } }),
     db.foodExpense.groupBy({ by: ["category"], where, _sum: { amount: true } }),
     db.otherExpense.groupBy({ by: ["category"], where, _sum: { amount: true } }),
-    getMyMemberId(user.id),
   ])
 
   const num = (v: unknown) => (v == null ? 0 : Number(v))
@@ -183,40 +193,61 @@ async function cycleSummary(cycleId: string): Promise<CycleSummary> {
     otherByCategory: Object.fromEntries(otherCats.map((c) => [c.category, num(c._sum.amount)])),
   })
 
-  const isManager = user.role === "manager"
   return {
     ...result,
     cycle_id: cycleId,
-    is_manager: isManager,
-    my_member_id: myMemberId,
-    members: isManager ? result.members : result.members.filter((m) => m.member_id === myMemberId),
+    is_manager: ctx.isManager,
+    my_member_id: ctx.member.id,
+    members: ctx.isManager ? result.members : result.members.filter((m) => m.member_id === ctx.member.id),
   } as CycleSummary
 }
 
+/** Accounts of this mess plus pending requests to join it (managers only). */
 async function users(): Promise<AppUser[]> {
-  await requireManager()
+  const { mess } = await requireMessManager()
   const rows = await db.user.findMany({
+    where: {
+      platform_role: "user",
+      OR: [{ requested_mess_id: mess.id }, { member: { mess_id: mess.id } }],
+    },
     select: {
       id: true,
       name: true,
       email: true,
       phone: true,
-      role: true,
       status: true,
       approved_at: true,
       approved_by: true,
       created_at: true,
-      member: { select: { id: true } },
+      member: { select: { id: true, role: true, mess_id: true } },
     },
     orderBy: [{ created_at: "desc" }],
   })
-  return rows.map(({ member, ...u }) => ({ ...serialize(u), member_id: member?.id ?? null }))
+  return rows.map(({ member, ...u }) => ({
+    ...serialize(u),
+    role: member?.mess_id === mess.id ? member.role : "member",
+    member_id: member?.mess_id === mess.id ? member.id : null,
+  }))
 }
 
 async function pendingCount(): Promise<number> {
-  const user = await requireUser()
-  if (user.role !== "manager") return 0
-  return db.user.count({ where: { status: "pending" } })
+  const session = await getSession()
+  if (!session || session.platform_role === "super_admin") return 0
+  const membership = await getMembership(session.id)
+  if (!membership || membership.role !== "manager" || membership.mess.status !== "active") return 0
+  return db.user.count({ where: { status: "pending", requested_mess_id: membership.mess.id } })
+}
+
+/** Public: active messes matching a name, for the "join a mess" picker on registration. */
+async function searchMesses(q: string): Promise<{ id: string; name: string; address: string }[]> {
+  const term = (q ?? "").trim()
+  if (term.length < 2) return []
+  return db.mess.findMany({
+    where: { status: "active", name: { contains: term, mode: "insensitive" } },
+    select: { id: true, name: true, address: true },
+    orderBy: { name: "asc" },
+    take: 8,
+  })
 }
 
 export const queries = {
@@ -232,6 +263,8 @@ export const queries = {
   cycleSummary,
   users,
   pendingCount,
+  searchMesses,
+  ...adminQueries,
 }
 
 export type Queries = typeof queries

@@ -22,6 +22,13 @@ const CODES: Record<string, TKey> = {
   EMAIL_TAKEN: "auth.emailTaken",
   WRONG_PASSWORD: "auth.wrongPassword",
   NETWORK: "errors.network",
+  NO_MESS: "errors.noMess",
+  MESS_PENDING: "errors.messPending",
+  MESS_INACTIVE: "errors.messInactive",
+  MESS_REJECTED: "errors.messRejected",
+  MESS_NAME_TAKEN: "errors.messNameTaken",
+  ALREADY_IN_MESS: "errors.alreadyInMess",
+  MESS_NOT_AVAILABLE: "errors.messNotAvailable",
 }
 
 /** Maps any error (ApiError, Error with a code message, or a code string) to a translation key. */

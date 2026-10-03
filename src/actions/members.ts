@@ -1,18 +1,21 @@
 "use server"
 
 import { z } from "zod"
+import { requireMessManager } from "@/server/context"
 import { db } from "@/server/db"
 import { AppError, run } from "@/server/errors"
 import { nullIfEmpty, openCycle, parse } from "@/server/guards"
 import { toDbDate } from "@/server/serialize"
-import { requireManager } from "@/server/session"
 import { memberSchema, nonNegativeAmountSchema } from "@/lib/validation"
 
-/** Link a member to an approved account that registered with the same email. */
-async function accountFor(email: string | null) {
-  if (!email) return null
-  const user = await db.user.findUnique({ where: { email }, include: { member: { select: { id: true } } } })
-  return user && !user.member ? user.id : null
+// Mess members (people living in the mess). All operations are limited to the
+// manager's own mess. Accounts are linked only through approved join requests
+// (src/actions/users.ts) — typing someone's email never grants them access.
+
+async function memberOfMess(memberId: string, messId: string) {
+  const member = await db.member.findFirst({ where: { id: memberId, mess_id: messId } })
+  if (!member) throw new AppError("NOT_FOUND")
+  return member
 }
 
 export async function createMember(
@@ -20,38 +23,34 @@ export async function createMember(
   addTo?: { cycleId: string; rent?: number | string }
 ) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const data = parse(memberSchema, values)
-    const email = nullIfEmpty(data.email)?.toLowerCase() ?? null
     const member = await db.member.create({
       data: {
+        mess_id: ctx.mess.id,
         full_name: data.full_name,
-        email,
+        email: nullIfEmpty(data.email)?.toLowerCase() ?? null,
         phone: nullIfEmpty(data.phone),
         joined_at: toDbDate(data.joined_at),
-        user_id: await accountFor(email),
       },
     })
-    if (addTo) await addToCycle(addTo.cycleId, member.id, addTo.rent)
+    if (addTo) await addToCycle(ctx.mess.id, addTo.cycleId, member.id, addTo.rent)
     return { id: member.id }
   })
 }
 
 export async function updateMember(memberId: string, values: z.input<typeof memberSchema>) {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
     const data = parse(memberSchema, values)
-    const email = nullIfEmpty(data.email)?.toLowerCase() ?? null
-    const current = await db.member.findUniqueOrThrow({ where: { id: memberId } })
+    await memberOfMess(memberId, ctx.mess.id)
     await db.member.update({
       where: { id: memberId },
       data: {
         full_name: data.full_name,
-        email,
+        email: nullIfEmpty(data.email)?.toLowerCase() ?? null,
         phone: nullIfEmpty(data.phone),
         joined_at: toDbDate(data.joined_at),
-        // Never re-assign an existing account link; only link an unlinked member.
-        ...(current.user_id ? {} : { user_id: await accountFor(email) }),
       },
     })
     return null
@@ -60,18 +59,23 @@ export async function updateMember(memberId: string, values: z.input<typeof memb
 
 export async function setMemberStatus(memberId: string, status: "active" | "inactive") {
   return run(async () => {
-    await requireManager()
+    const ctx = await requireMessManager()
+    await memberOfMess(memberId, ctx.mess.id)
     await db.member.update({
       where: { id: memberId },
-      data: status === "inactive" ? { status, left_at: toDbDate(new Date().toISOString().slice(0, 10)) } : { status, left_at: null },
+      data:
+        status === "inactive"
+          ? { status, left_at: toDbDate(new Date().toISOString().slice(0, 10)) }
+          : { status, left_at: null },
     })
     return null
   })
 }
 
 /** Adds (or re-adds) a member to a month. Rent defaults to their most recent rent. */
-async function addToCycle(cycleId: string, memberId: string, rent?: number | string) {
-  await openCycle(cycleId)
+async function addToCycle(messId: string, cycleId: string, memberId: string, rent?: number | string) {
+  await openCycle(cycleId, messId)
+  await memberOfMess(memberId, messId)
   const parsedRent =
     rent === undefined || rent === "" ? null : parse(z.object({ r: nonNegativeAmountSchema }), { r: rent }).r
   const lastRent =
@@ -102,8 +106,8 @@ async function addToCycle(cycleId: string, memberId: string, rent?: number | str
 
 export async function addMemberToMonth(cycleId: string, memberId: string, rent?: number | string) {
   return run(async () => {
-    await requireManager()
-    await addToCycle(cycleId, memberId, rent)
+    const ctx = await requireMessManager()
+    await addToCycle(ctx.mess.id, cycleId, memberId, rent)
     return null
   })
 }
@@ -111,8 +115,8 @@ export async function addMemberToMonth(cycleId: string, memberId: string, rent?:
 /** Removes a member from the month. Their meals and payments are kept. */
 export async function removeMemberFromMonth(cycleId: string, memberId: string) {
   return run(async () => {
-    await requireManager()
-    await openCycle(cycleId)
+    const ctx = await requireMessManager()
+    await openCycle(cycleId, ctx.mess.id)
     const { count } = await db.monthlyMember.updateMany({
       where: { monthly_cycle_id: cycleId, member_id: memberId },
       data: { status: "removed" },
