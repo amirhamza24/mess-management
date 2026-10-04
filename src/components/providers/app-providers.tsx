@@ -6,6 +6,7 @@ import { useState } from "react"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { Lang } from "@/i18n"
+import { ConfirmProvider } from "./confirm-provider"
 import { I18nProvider } from "./i18n-provider"
 
 export function AppProviders({ lang, children }: { lang: Lang; children: React.ReactNode }) {
@@ -32,7 +33,7 @@ export function AppProviders({ lang, children }: { lang: Lang; children: React.R
       <QueryClientProvider client={queryClient}>
         <I18nProvider initialLang={lang}>
           <TooltipProvider>
-            {children}
+            <ConfirmProvider>{children}</ConfirmProvider>
             <Toaster position="top-right" richColors closeButton offset={{ top: 68 }} mobileOffset={{ top: 64 }} />
           </TooltipProvider>
         </I18nProvider>

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useInvalidateCycle } from "@/features/accounts/queries"
 import type { CycleMember } from "@/features/members/queries"
@@ -51,6 +52,7 @@ export function PaymentFormDialog({
   preset?: { memberId?: string; purpose?: PaymentPurpose; amount?: number }
 }) {
   const { t, monthName } = useI18n()
+  const confirmSave = useConfirmSave()
   const invalidate = useInvalidateCycle()
   const isEdit = !!payment
 
@@ -82,20 +84,22 @@ export function PaymentFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, payment])
 
-  const onSubmit = async (raw: Values) => {
+  const onSubmit = (raw: Values) => {
     const values = paymentSchema.parse(raw)
     if (!isDateInMonth(values.date, cycle.year, cycle.month)) {
       form.setError("date", { message: "validation.dateInMonth" })
       return
     }
-    const error = errOf(await savePayment(cycle.id, raw, payment?.id))
-    if (error) {
-      toast.error(t(errorKey(error)))
-      return
-    }
-    toast.success(t(isEdit ? "payments.updated" : "payments.added"))
-    await invalidate(cycle.id, [qk.payments, qk.rents])
-    onOpenChange(false)
+    confirmSave(async () => {
+      const error = errOf(await savePayment(cycle.id, raw, payment?.id))
+      if (error) {
+        toast.error(t(errorKey(error)))
+        return
+      }
+      toast.success(t(isEdit ? "payments.updated" : "payments.added"))
+      await invalidate(cycle.id, [qk.payments, qk.rents])
+      onOpenChange(false)
+    })
   }
 
   return (

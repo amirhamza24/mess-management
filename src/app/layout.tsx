@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     default: "MessHisab — Smart Mess Management & Monthly Hisab",
     template: "%s · MessHisab",
   },
-  description: "Manage meals, bazar, house rent, payments, expenses, and monthly mess হিসাব in one place.",
+  description: "Manage meals, bazar, house rent, payments, expenses, and monthly mess Hisab in one place.",
   applicationName: "MessHisab",
 }
 

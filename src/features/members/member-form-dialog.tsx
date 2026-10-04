@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { errorKey } from "@/lib/errors"
@@ -42,6 +43,7 @@ export function MemberFormDialog({
   member?: MessMember | null
 }) {
   const { t, monthName } = useI18n()
+  const confirmSave = useConfirmSave()
   const { mess, cycle, refreshMess } = useMess()
   const queryClient = useQueryClient()
   const isEdit = !!member
@@ -68,7 +70,9 @@ export function MemberFormDialog({
     setRent("")
   }, [open, member, form])
 
-  const onSubmit = async (values: Values) => {
+  const onSubmit = (values: Values) => confirmSave(() => persist(values))
+
+  const persist = async (values: Values) => {
     if (isEdit) {
       const error = errOf(await updateMember(member!.id, values))
       if (error) return void toast.error(t(errorKey(error)))

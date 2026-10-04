@@ -1,25 +1,12 @@
 "use client"
 
-import { useQueryClient } from "@tanstack/react-query"
 import { LogOut } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { logout } from "@/actions/auth"
 import { Logo } from "@/components/brand/logo"
 import { Rings } from "@/components/brand/rings"
 import { LanguageSwitch, ThemeToggle } from "@/components/layout/preferences"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/components/providers/i18n-provider"
-
-export function useSignOut() {
-  const router = useRouter()
-  const queryClient = useQueryClient()
-  return async () => {
-    await logout()
-    queryClient.clear()
-    router.replace("/login")
-    router.refresh()
-  }
-}
+import { useSignOut } from "@/features/auth/use-sign-out"
 
 /** Minimal shell for screens shown before a mess is usable (create / pending / rejected / inactive). */
 export function SetupShell({ children }: { children: React.ReactNode }) {

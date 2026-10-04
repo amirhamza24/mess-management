@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { changePassword as changePasswordAction, updateProfile } from "@/actions/auth"
@@ -29,6 +30,7 @@ type PasswordValues = z.infer<typeof changePasswordSchema>
 
 export function ProfilePage() {
   const { t } = useI18n()
+  const confirmSave = useConfirmSave()
   const queryClient = useQueryClient()
   const { me, mess, memberId, isManager, displayName } = useMess()
 
@@ -89,7 +91,7 @@ export function ProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={profileForm.handleSubmit(saveProfile)} className="grid grid-cols-1 gap-4" noValidate>
+          <form onSubmit={profileForm.handleSubmit((v) => confirmSave(() => saveProfile(v)))} className="grid grid-cols-1 gap-4" noValidate>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label={t("auth.fullName")} htmlFor="pf-name" error={pe.errors.full_name?.message}>
                 <Input id="pf-name" aria-invalid={!!pe.errors.full_name} {...profileForm.register("full_name")} />
@@ -117,7 +119,13 @@ export function ProfilePage() {
           <CardDescription>{t("profile.changePassword")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={passwordForm.handleSubmit(changePassword)} className="grid grid-cols-1 gap-4" noValidate>
+          <form onSubmit={passwordForm.handleSubmit((v) =>
+              confirmSave(() => changePassword(v), {
+                title: t("confirm.passwordTitle"),
+                description: t("confirm.passwordDesc"),
+                confirmLabel: t("auth.updatePassword"),
+              })
+            )} className="grid grid-cols-1 gap-4" noValidate>
             <Field label={t("auth.currentPassword")} htmlFor="pw-current" error={pw.errors.current?.message}>
               <PasswordInput id="pw-current" autoComplete="current-password" aria-invalid={!!pw.errors.current} {...passwordForm.register("current")} />
             </Field>

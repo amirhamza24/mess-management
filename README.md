@@ -1,6 +1,6 @@
 # MessHisab
 
-**Smart Mess Management & Monthly Hisab** — a multi-mess platform to manage meals, bazar, house rent, payments, expenses and the monthly mess হিসাব. Built for bachelor, student and job-holder messes in Bangladesh.
+**Smart Mess Management & Monthly Hisab** — a multi-mess platform to manage meals, bazar, house rent, payments, expenses and the monthly mess Hisab. Built for bachelor, student and job-holder messes in Bangladesh.
 
 ## Features
 
@@ -10,7 +10,7 @@
 - **Join requests** — people can register to join an existing mess; that mess's manager approves them and can make anyone a manager or member.
 - **Monthly cycles** — start a month with the members staying, add/remove members mid-month, close (lock) and reopen months.
 - **Meals**, **Bazar & Food**, **House Rent**, **Other Expenses**, **Payments** (cash, bKash, Nagad, bank) — kept as separate accounts.
-- **Monthly হিসাব** — meal rate, rent and other-expense accounts plus each member's settlement (Due / Advance).
+- **Monthly Hisab** — meal rate, rent and other-expense accounts plus each member's settlement (Due / Advance).
 - **Reports & PDF**, dashboard charts, বাংলা / English, dark / light mode, mobile layout.
 
 ## Setup

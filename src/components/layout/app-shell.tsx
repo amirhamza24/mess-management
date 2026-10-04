@@ -1,11 +1,10 @@
 "use client"
 
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { LogOut, Menu, Settings, UserCircle2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
-import { toast } from "sonner"
 import { Logo } from "@/components/brand/logo"
 import { MemberAvatar } from "@/components/common/member-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -22,26 +21,13 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
-import { logout as logoutAction } from "@/actions/auth"
+import { useSignOut } from "@/features/auth/use-sign-out"
 import { query } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 import { MonthSwitcher } from "./month-switcher"
 import { BOTTOM_NAV, findNavItem, isActive, MAIN_NAV, SECONDARY_NAV, type NavItem } from "./nav-items"
 import { LanguageSwitch, ThemeToggle } from "./preferences"
-
-function useLogout() {
-  const router = useRouter()
-  const queryClient = useQueryClient()
-  const { t } = useI18n()
-  return async () => {
-    await logoutAction()
-    queryClient.clear()
-    toast.success(t("auth.loggedOut"))
-    router.replace("/login")
-    router.refresh()
-  }
-}
 
 /** Registrations waiting for approval (managers only), shown as a badge. */
 function usePendingCount() {
@@ -72,15 +58,14 @@ function NavLink({ item, onNavigate, badge }: { item: NavItem; onNavigate?: () =
       className={cn(
         "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shadow-primary/25"
           : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
       )}
     >
-      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-sidebar-primary" />}
-      <item.icon className={cn("size-4 shrink-0", active ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-foreground")} />
+      <item.icon className={cn("size-4 shrink-0", active ? "text-sidebar-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
       <span className="truncate">{t(item.label)}</span>
       {!!badge && (
-        <span className="ml-auto min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-[0.65rem] leading-none font-semibold text-primary-foreground">
+        <span className={cn("ml-auto min-w-5 rounded-full px-1.5 py-0.5 text-center text-[0.65rem] leading-none font-semibold", active ? "bg-white text-primary" : "bg-primary text-primary-foreground")}>
           {badge}
         </span>
       )}
@@ -92,7 +77,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n()
   const { mess, isManager } = useMess()
   const items = useNavItems()
-  const logout = useLogout()
+  const logout = useSignOut()
   const pending = usePendingCount()
 
   return (
@@ -146,7 +131,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 function UserMenu() {
   const { t } = useI18n()
   const { displayName, me, isManager } = useMess()
-  const logout = useLogout()
+  const logout = useSignOut()
   const router = useRouter()
   return (
     <DropdownMenu>

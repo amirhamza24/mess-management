@@ -45,6 +45,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useConfirm, useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { errOf, query } from "@/lib/api"
@@ -65,6 +67,7 @@ const STATUS_STYLE: Record<UserStatus, string> = {
 
 export function UsersPage() {
   const { t, date } = useI18n()
+  const ask = useConfirm()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { isManager, me } = useMess()
@@ -123,6 +126,26 @@ export function UsersPage() {
 
   const roleName = (role: AppUser["role"]) => t(`roles.${role}`)
 
+  const confirmApprove = (u: AppUser) =>
+    ask({
+      title: t(u.status === "suspended" ? "confirm.reactivateTitle" : "confirm.approveUserTitle", { name: u.name }),
+      description: t(u.status === "suspended" ? "confirm.reactivateDesc" : "confirm.approveUserDesc"),
+      confirmLabel: t(u.status === "suspended" ? "users.reactivate" : "users.approve"),
+      pendingLabel: t("admin.approving"),
+      action: () => act(u, () => approveUser(u.id), t("users.approvedToast", { name: u.name })),
+    })
+
+  const confirmRole = (u: AppUser) => {
+    const role = u.role === "manager" ? "member" : "manager"
+    return ask({
+      title: t("confirm.roleTitle", { name: u.name, role: roleName(role) }),
+      description: t(role === "manager" ? "confirm.roleManagerDesc" : "confirm.roleMemberDesc"),
+      confirmLabel: t(role === "manager" ? "users.makeManager" : "users.makeMember"),
+      pendingLabel: t("common.saving"),
+      action: () => act(u, () => setUserRole(u.id, role), t("users.roleToast", { name: u.name, role: roleName(role) })),
+    })
+  }
+
   const runConfirm = async () => {
     if (!confirm) return
     const { kind, user } = confirm
@@ -134,6 +157,78 @@ export function UsersPage() {
         t(kind === "reject" ? "users.rejectedToast" : "users.suspendedToast", { name: user.name })
       )
     setConfirm(null)
+  }
+
+  const actions = (u: AppUser) => {
+    const self = u.id === me.user.id
+    const busy = busyId === u.id
+    return (
+      <div className="flex items-center justify-end gap-2">
+        {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+        {(u.status === "pending" || u.status === "rejected") && (
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => confirmApprove(u)}
+          >
+            <Check /> {t("users.approve")}
+          </Button>
+        )}
+        {u.status === "pending" && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirm({ kind: "reject", user: u })}>
+            <X /> {t("users.reject")}
+          </Button>
+        )}
+        {u.status === "suspended" && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => confirmApprove(u)}
+          >
+            <RotateCcw /> {t("users.reactivate")}
+          </Button>
+        )}
+  
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" size="icon-sm" disabled={busy} aria-label={t("common.actions")}>
+                <MoreHorizontal />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-52">
+            {u.status === "approved" && (
+              <DropdownMenuItem
+                onClick={() => confirmRole(u)}
+              >
+                <ShieldCheck /> {t(u.role === "manager" ? "users.makeMember" : "users.makeManager")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => setResetFor(u)}>
+              <KeyRound /> {t("users.resetPassword")}
+            </DropdownMenuItem>
+            {u.status === "approved" && !self && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => setConfirm({ kind: "suspend", user: u })}>
+                  <UserMinus /> {t("users.suspend")}
+                </DropdownMenuItem>
+              </>
+            )}
+            {(u.status === "pending" || u.status === "rejected") && !u.member_id && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => setConfirm({ kind: "delete", user: u })}>
+                  <Trash2 /> {t("users.deleteRegistration")}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    )
   }
 
   const filters: { value: Filter; label: string }[] = [
@@ -183,10 +278,63 @@ export function UsersPage() {
         ) : visible.length === 0 ? (
           <EmptyState icon={UserCheck} title={t("users.empty")} />
         ) : (
-          <ul className="divide-y">
+          <>
+          {/* Desktop table */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="pl-4">{t("members.fullName")}</TableHead>
+                  <TableHead>{t("members.email")}</TableHead>
+                  <TableHead>{t("members.phone")}</TableHead>
+                  <TableHead>{t("users.role")}</TableHead>
+                  <TableHead>{t("users.status")}</TableHead>
+                  <TableHead>{t("users.requestedOn")}</TableHead>
+                  <TableHead>{t("users.approvedByCol")}</TableHead>
+                  <TableHead className="pr-4 text-right">{t("common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((u) => (
+                  <TableRow key={u.id}>
+                    <TableCell className="pl-4">
+                      <span className="flex items-center gap-2.5 font-medium">
+                        <MemberAvatar name={u.name} className="size-8" />
+                        <span className="max-w-40 truncate">{u.name}</span>
+                        {u.id === me.user.id && <span className="text-xs font-normal text-primary">({t("users.you")})</span>}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-52 truncate text-muted-foreground">{u.email}</TableCell>
+                    <TableCell className="tabular text-muted-foreground">{u.phone ?? "—"}</TableCell>
+                    <TableCell>
+                      {u.status === "approved" ? (
+                        <Badge variant="secondary" className={u.role === "manager" ? "bg-accent text-accent-foreground" : undefined}>
+                          {roleName(u.role)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[0.7rem] font-medium", STATUS_STYLE[u.status])}>
+                        {t(`users.${u.status}`)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{date(u.created_at.slice(0, 10))}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {u.status === "approved" && u.approved_by ? u.approved_by : "—"}
+                    </TableCell>
+                    <TableCell className="pr-4">{actions(u)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile list */}
+          <ul className="divide-y md:hidden">
             {visible.map((u) => {
               const self = u.id === me.user.id
-              const busy = busyId === u.id
               return (
                 <li key={u.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -215,78 +363,12 @@ export function UsersPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2">
-                    {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-                    {(u.status === "pending" || u.status === "rejected") && (
-                      <Button
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => act(u, () => approveUser(u.id), t("users.approvedToast", { name: u.name }))}
-                      >
-                        <Check /> {t("users.approve")}
-                      </Button>
-                    )}
-                    {u.status === "pending" && (
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirm({ kind: "reject", user: u })}>
-                        <X /> {t("users.reject")}
-                      </Button>
-                    )}
-                    {u.status === "suspended" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => act(u, () => approveUser(u.id), t("users.approvedToast", { name: u.name }))}
-                      >
-                        <RotateCcw /> {t("users.reactivate")}
-                      </Button>
-                    )}
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" disabled={busy} aria-label={t("common.actions")}>
-                            <MoreHorizontal />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-52">
-                        {u.status === "approved" && (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const role = u.role === "manager" ? "member" : "manager"
-                              act(u, () => setUserRole(u.id, role), t("users.roleToast", { name: u.name, role: roleName(role) }))
-                            }}
-                          >
-                            <ShieldCheck /> {t(u.role === "manager" ? "users.makeMember" : "users.makeManager")}
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => setResetFor(u)}>
-                          <KeyRound /> {t("users.resetPassword")}
-                        </DropdownMenuItem>
-                        {u.status === "approved" && !self && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => setConfirm({ kind: "suspend", user: u })}>
-                              <UserMinus /> {t("users.suspend")}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {(u.status === "pending" || u.status === "rejected") && !u.member_id && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={() => setConfirm({ kind: "delete", user: u })}>
-                              <Trash2 /> {t("users.deleteRegistration")}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  {actions(u)}
                 </li>
               )
             })}
           </ul>
+          </>
         )}
       </Card>
 
@@ -325,6 +407,7 @@ export function UsersPage() {
 
 function ResetPasswordDialog({ user, onClose }: { user: AppUser | null; onClose: () => void }) {
   const { t } = useI18n()
+  const confirmSave = useConfirmSave()
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
@@ -335,9 +418,18 @@ function ResetPasswordDialog({ user, onClose }: { user: AppUser | null; onClose:
     onClose()
   }
 
-  const submit = async () => {
+  const submit = () => {
     if (!user) return
     if (password.length < 8) return setError("validation.passwordMin")
+    confirmSave(persist, {
+      title: t("confirm.resetPasswordTitle", { name: user.name }),
+      description: t("users.resetPasswordDesc"),
+      confirmLabel: t("users.resetPassword"),
+    })
+  }
+
+  const persist = async () => {
+    if (!user) return
     setPending(true)
     const code = errOf(await resetUserPassword(user.id, password))
     setPending(false)

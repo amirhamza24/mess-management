@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useI18n } from "@/components/providers/i18n-provider"
-import { useSignOut } from "@/features/mess-setup/setup-shell"
+import { useSignOut } from "@/features/auth/use-sign-out"
 import type { TKey } from "@/i18n"
 import { cn } from "@/lib/utils"
 import { MessActionsProvider } from "./mess-actions"
@@ -76,14 +76,13 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
+                active ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shadow-primary/25" : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-sidebar-primary" />}
-              <item.icon className={cn("size-4", active ? "text-sidebar-primary" : "text-muted-foreground group-hover:text-foreground")} />
+              <item.icon className={cn("size-4", active ? "text-sidebar-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
               <span className="truncate">{t(item.label)}</span>
               {!!badge && (
-                <span className="ml-auto min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-[0.65rem] leading-none font-semibold text-primary-foreground">
+                <span className={cn("ml-auto min-w-5 rounded-full px-1.5 py-0.5 text-center text-[0.65rem] leading-none font-semibold", active ? "bg-white text-primary" : "bg-primary text-primary-foreground")}>
                   {badge}
                 </span>
               )}

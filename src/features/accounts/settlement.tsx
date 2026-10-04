@@ -8,7 +8,15 @@ import type { SettlementRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /** Member final settlement table (desktop) with totals. */
-export function SettlementTable({ rows, highlightId }: { rows: SettlementRow[]; highlightId?: string }) {
+export function SettlementTable({
+  rows,
+  highlightId,
+  onSelect,
+}: {
+  rows: SettlementRow[]
+  highlightId?: string
+  onSelect?: (row: SettlementRow) => void
+}) {
   const { t, money, num } = useI18n()
   const sum = (k: keyof SettlementRow) => rows.reduce((s, r) => s + (r[k] as number), 0)
   return (
@@ -27,11 +35,21 @@ export function SettlementTable({ rows, highlightId }: { rows: SettlementRow[]; 
       </TableHeader>
       <TableBody>
         {rows.map((r) => (
-          <TableRow key={r.member_id} className={cn(r.member_id === highlightId && "bg-accent/40", r.status === "removed" && "opacity-70")}>
+          <TableRow
+            key={r.member_id}
+            onClick={onSelect ? () => onSelect(r) : undefined}
+            onKeyDown={onSelect ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(r)) : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+            className={cn(
+              r.member_id === highlightId && "bg-accent/40",
+              r.status === "removed" && "opacity-70",
+              onSelect && "cursor-pointer focus-visible:bg-accent/50 focus-visible:outline-none"
+            )}
+          >
             <TableCell className="pl-4">
               <span className="flex items-center gap-2 font-medium">
                 <MemberAvatar name={r.full_name} src={r.avatar_url} className="size-7" />
-                <span className="max-w-36 truncate">{r.full_name}</span>
+                <span className={cn("max-w-36 truncate", onSelect && "hover:text-primary")}>{r.full_name}</span>
               </span>
             </TableCell>
             <TableCell className="tabular text-right">{num(r.meals, 1)}</TableCell>
@@ -64,8 +82,18 @@ export function SettlementTable({ rows, highlightId }: { rows: SettlementRow[]; 
   )
 }
 
-/** Card version of one member's settlement — mirrors the printed হিসাব layout. */
-export function SettlementCard({ row, title, className }: { row: SettlementRow; title?: string; className?: string }) {
+/** Card version of one member's settlement — mirrors the printed Hisab layout. */
+export function SettlementCard({
+  row,
+  title,
+  className,
+  onSelect,
+}: {
+  row: SettlementRow
+  title?: string
+  className?: string
+  onSelect?: (row: SettlementRow) => void
+}) {
   const { t, money, num } = useI18n()
   const kind = balanceKind(row.balance)
   const lines: [string, string][] = [
@@ -75,7 +103,17 @@ export function SettlementCard({ row, title, className }: { row: SettlementRow; 
     [t("accounts.otherShare"), money(row.other_share)],
   ]
   return (
-    <div className={cn("rounded-xl border bg-card p-4", className)}>
+    <div
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      onClick={onSelect ? () => onSelect(row) : undefined}
+      onKeyDown={onSelect ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(row)) : undefined}
+      className={cn(
+        "rounded-xl border bg-card p-4",
+        onSelect && "cursor-pointer transition-shadow hover:shadow-md hover:ring-1 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        className
+      )}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           <MemberAvatar name={row.full_name} src={row.avatar_url} className="size-8" />

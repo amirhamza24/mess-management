@@ -8,6 +8,7 @@ import { MemberAvatar } from "@/components/common/member-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useInvalidateCycle } from "@/features/accounts/queries"
 import type { CycleMember } from "@/features/members/queries"
@@ -125,6 +126,7 @@ export function DailyMealEditor({
   canEdit: boolean
 }) {
   const { t, num, date: fmtDate, weekday } = useI18n()
+  const confirmSave = useConfirmSave()
   const invalidate = useInvalidateCycle()
   const minDate = monthStartISO(cycle.year, cycle.month)
   const maxDate = monthEndISO(cycle.year, cycle.month)
@@ -179,11 +181,18 @@ export function DailyMealEditor({
     setDraft(Object.fromEntries(rows.map((m) => [m.id, m.status === "active" ? { breakfast: "1", lunch: "1", dinner: "1" } : { ...ZERO }])))
   const clearAll = () => setDraft(Object.fromEntries(rows.map((m) => [m.id, { ...ZERO }])))
 
-  const save = async () => {
+  const save = () => {
     if (!allValid) {
       toast.error(t("validation.mealValue"))
       return
     }
+    confirmSave(persist, {
+      title: t("confirm.mealsTitle", { date: fmtDate(date, "long") }),
+      description: t("confirm.mealsDesc", { total: num(dayTotal) }),
+    })
+  }
+
+  const persist = async () => {
     setSaving(true)
     // All-zero entries clear that member's record for the day.
     const entries = rows.map((m) => {

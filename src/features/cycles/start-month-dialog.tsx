@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMembers } from "@/features/members/queries"
 import { useMess } from "@/features/mess/mess-provider"
@@ -29,6 +30,7 @@ import { errOf, query } from "@/lib/api"
 /** Manager starts a monthly cycle, choosing who stays this month. */
 export function StartMonthDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t, monthName, money } = useI18n()
+  const confirmSave = useConfirmSave()
   const { period, cycles, refreshMess } = useMess()
   const membersQuery = useMembers()
 
@@ -80,6 +82,15 @@ export function StartMonthDialog({ open, onOpenChange }: { open: boolean; onOpen
       toast.error(t("validation.amountNonNegative"))
       return
     }
+    confirmSave(() => persist(defaultRent), {
+      title: t("confirm.startMonthTitle", { month: monthName(period.year, period.month) }),
+      description: t("confirm.startMonthDesc", { count: selected.size }),
+      confirmLabel: t("month.start"),
+      pendingLabel: t("month.starting"),
+    })
+  }
+
+  const persist = async (defaultRent: number) => {
     setPending(true)
     const error = errOf(
       await startMonth({ year: period.year, month: period.month, memberIds: [...selected], defaultRent })

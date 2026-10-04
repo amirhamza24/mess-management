@@ -16,7 +16,8 @@ import { errOf, query } from "@/lib/api"
 import { errorKey } from "@/lib/errors"
 import type { MyMess } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { SetupShell, useSignOut } from "./setup-shell"
+import { useSignOut } from "@/features/auth/use-sign-out"
+import { SetupShell } from "./setup-shell"
 
 const EASE = [0.16, 1, 0.3, 1] as const
 

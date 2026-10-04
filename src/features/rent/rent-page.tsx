@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useCycleSummary, useInvalidateCycle } from "@/features/accounts/queries"
 import { ClosedMonthBanner, MonthGate } from "@/features/cycles/month-gate"
@@ -282,6 +283,7 @@ type RentValues = z.input<typeof rentSchema>
 
 function EditRentDialog({ cycle, rent, name, onClose }: { cycle: MonthlyCycle; rent: HouseRent | null; name: string; onClose: () => void }) {
   const { t } = useI18n()
+  const confirmSave = useConfirmSave()
   const invalidate = useInvalidateCycle()
   const form = useForm<RentValues>({ resolver: zodResolver(rentSchema), defaultValues: { amount: "", note: "" } })
   const { errors, isSubmitting } = form.formState
@@ -290,7 +292,9 @@ function EditRentDialog({ cycle, rent, name, onClose }: { cycle: MonthlyCycle; r
     if (rent) form.reset({ amount: String(toNumber(rent.amount)), note: rent.note ?? "" })
   }, [rent, form])
 
-  const onSubmit = async (raw: RentValues) => {
+  const onSubmit = (raw: RentValues) => confirmSave(() => persist(raw))
+
+  const persist = async (raw: RentValues) => {
     const error = errOf(await updateRent(rent!.id, raw))
     if (error) return void toast.error(t(errorKey(error)))
     toast.success(t("rent.updated"))
@@ -340,14 +344,23 @@ function SetAllRentDialog({
   count: number
 }) {
   const { t, money } = useI18n()
+  const confirmSave = useConfirmSave()
   const invalidate = useInvalidateCycle()
   const [amount, setAmount] = useState("")
   const [pending, setPending] = useState(false)
   const value = Number(amount)
   const valid = amount !== "" && Number.isFinite(value) && value >= 0
 
-  const apply = async () => {
+  const apply = () => {
     if (!valid) return
+    confirmSave(persist, {
+      title: t("confirm.setAllRentTitle", { amount: money(value) }),
+      description: t("rent.setAllDesc"),
+      confirmLabel: t("rent.setAll"),
+    })
+  }
+
+  const persist = async () => {
     setPending(true)
     const error = errOf(await setAllRent(cycle.id, value))
     setPending(false)

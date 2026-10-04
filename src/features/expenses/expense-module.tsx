@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useCycleSummary, useInvalidateCycle } from "@/features/accounts/queries"
 import { ClosedMonthBanner, MonthGate } from "@/features/cycles/month-gate"
@@ -30,6 +31,7 @@ import { toNumber } from "@/lib/format"
 import { deleteExpense } from "@/actions/records"
 import { errOf } from "@/lib/api"
 import type { MonthlyCycle } from "@/lib/types"
+import { cn } from "@/lib/utils"
 import { EXPENSE_KINDS, type ExpenseKind } from "./config"
 import { ExpenseFormDialog } from "./expense-form-dialog"
 import { useExpenses, type ExpenseRow } from "./queries"
@@ -114,6 +116,33 @@ function ExpenseContent({ kind, cycle }: { kind: ExpenseKind; cycle: MonthlyCycl
   }
 
   const catLabel = (c: string) => t(`${cfg.categoryPrefix}.${c}` as TKey)
+  const filteredTotal = groups.reduce((sum, g) => sum + g.total, 0)
+
+  const rowMenu = (r: ExpenseRow) =>
+    canEdit && (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label={t("common.actions")}>
+              <MoreHorizontal />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => {
+              setEditing(r)
+              setFormOpen(true)
+            }}
+          >
+            <Pencil /> {t("common.edit")}
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={() => setDeleting(r)}>
+            <Trash2 /> {t("common.delete")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
   const s = summary.data
 
   return (
@@ -191,7 +220,62 @@ function ExpenseContent({ kind, cycle }: { kind: ExpenseKind; cycle: MonthlyCycl
               }
             />
           ) : (
-            <div className="divide-y">
+            <>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="pl-4">{t("common.date")}</TableHead>
+                    <TableHead>{t("common.category")}</TableHead>
+                    <TableHead>{t("common.description")}</TableHead>
+                    <TableHead>{t(cfg.paidByLabel)}</TableHead>
+                    <TableHead>{t("common.note")}</TableHead>
+                    <TableHead className="text-right">{t("common.amount")}</TableHead>
+                    {canEdit && <TableHead className="w-12 pr-4" />}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {groups.flatMap((g) =>
+                    g.items.map((r, i) => (
+                      <TableRow key={r.id} className={cn(i === 0 && "border-t-2")}>
+                        <TableCell className="pl-4 whitespace-nowrap">
+                          {i === 0 ? (
+                            <>
+                              <span className="font-medium">{fmtDate(g.date)}</span>
+                              <span className="block text-xs text-muted-foreground">{weekday(g.date)}</span>
+                            </>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2 font-medium">
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                              <cfg.icon className="size-3.5" />
+                            </span>
+                            {catLabel(r.category)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="max-w-48 truncate text-muted-foreground">{r.description || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.paid_by ? nameOf(r.paid_by) : "—"}</TableCell>
+                        <TableCell className="max-w-40 truncate text-muted-foreground">{r.note || "—"}</TableCell>
+                        <TableCell className="tabular text-right font-semibold">{money(r.amount)}</TableCell>
+                        {canEdit && <TableCell className="pr-4 text-right">{rowMenu(r)}</TableCell>}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="pl-4 font-semibold" colSpan={5}>{t("common.total")}</TableCell>
+                    <TableCell className="tabular text-right font-semibold">{money(filteredTotal)}</TableCell>
+                    {canEdit && <TableCell className="pr-4" />}
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </div>
+
+            {/* Mobile: grouped by day */}
+            <div className="divide-y md:hidden">
               {groups.map((g) => (
                 <section key={g.date}>
                   <header className="flex items-center justify-between bg-muted/40 px-4 py-2 text-xs">
@@ -219,36 +303,14 @@ function ExpenseContent({ kind, cycle }: { kind: ExpenseKind; cycle: MonthlyCycl
                           </p>
                         </div>
                         <span className="tabular text-sm font-semibold">{money(r.amount)}</span>
-                        {canEdit && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button variant="ghost" size="icon-sm" aria-label={t("common.actions")}>
-                                  <MoreHorizontal />
-                                </Button>
-                              }
-                            />
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditing(r)
-                                  setFormOpen(true)
-                                }}
-                              >
-                                <Pencil /> {t("common.edit")}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem variant="destructive" onClick={() => setDeleting(r)}>
-                                <Trash2 /> {t("common.delete")}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        {rowMenu(r)}
                       </li>
                     ))}
                   </ul>
                 </section>
               ))}
             </div>
+            </>
           )}
         </Card>
 

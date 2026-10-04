@@ -8,10 +8,7 @@ import {
   CalendarDays,
   Info,
   Loader2,
-  Mail,
   MapPin,
-  Phone,
-  ShieldCheck,
   UserCog,
   Users,
   XCircle,
@@ -28,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/components/providers/i18n-provider"
 import type { TKey } from "@/i18n"
@@ -69,54 +67,91 @@ function Info2({ label, value, icon: Icon }: { label: string; value: React.React
   )
 }
 
-function PersonCard({ person, highlight }: { person: AdminPerson; highlight?: boolean }) {
+const ACCOUNT_STYLE: Record<string, string> = {
+  approved: "bg-success-soft text-success",
+  pending: "bg-warning-soft text-warning",
+  rejected: "bg-danger-soft text-destructive",
+  suspended: "bg-muted text-muted-foreground",
+}
+
+/** Managers / members of a mess: a table on desktop, compact rows on phones. */
+function PeopleTable({ people }: { people: AdminPerson[] }) {
   const { t, date } = useI18n()
+  const role = (p: AdminPerson) => (
+    <Badge variant="secondary" className={p.role === "manager" ? "bg-accent text-accent-foreground" : undefined}>
+      {t(`roles.${p.role}`)}
+    </Badge>
+  )
+  const status = (p: AdminPerson) => (
+    <span className="inline-flex items-center gap-1.5 text-sm">
+      <span className={cn("size-1.5 rounded-full", p.member_status === "active" ? "bg-success" : "bg-muted-foreground")} />
+      {t(`members.${p.member_status}`)}
+    </span>
+  )
+  const account = (p: AdminPerson) =>
+    p.account_status ? (
+      <span className={cn("rounded-full px-2 py-0.5 text-[0.7rem] font-medium", ACCOUNT_STYLE[p.account_status])}>
+        {t(`users.${p.account_status}`)}
+      </span>
+    ) : (
+      <span className="text-xs text-muted-foreground">{t("admin.noAccount")}</span>
+    )
+
   return (
-    <Card className={cn("gap-3 p-4 shadow-xs transition-shadow hover:shadow-sm", highlight && "ring-primary/30")}>
-      <div className="flex items-center gap-3">
-        <MemberAvatar name={person.name} className="size-10" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{person.name}</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary" className={person.role === "manager" ? "bg-accent text-accent-foreground" : undefined}>
-              {t(`roles.${person.role}`)}
-            </Badge>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[0.7rem] font-medium",
-                person.member_status === "active" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground"
-              )}
-            >
-              {t(`members.${person.member_status}`)}
-            </span>
-          </div>
-        </div>
+    <Card className="gap-0 overflow-hidden py-0 shadow-xs">
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="pl-4">{t("members.fullName")}</TableHead>
+              <TableHead>{t("members.email")}</TableHead>
+              <TableHead>{t("members.phone")}</TableHead>
+              <TableHead>{t("members.role")}</TableHead>
+              <TableHead>{t("members.status")}</TableHead>
+              <TableHead>{t("admin.accountStatus")}</TableHead>
+              <TableHead className="pr-4">{t("admin.joined")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {people.map((p) => (
+              <TableRow key={p.id} className={cn(p.member_status === "inactive" && "opacity-60")}>
+                <TableCell className="pl-4">
+                  <span className="flex items-center gap-2.5 font-medium">
+                    <MemberAvatar name={p.name} className="size-7" />
+                    <span className="max-w-44 truncate">{p.name}</span>
+                  </span>
+                </TableCell>
+                <TableCell className="max-w-56 truncate text-muted-foreground">{p.email ?? "—"}</TableCell>
+                <TableCell className="tabular text-muted-foreground">{p.phone ?? "—"}</TableCell>
+                <TableCell>{role(p)}</TableCell>
+                <TableCell>{status(p)}</TableCell>
+                <TableCell>{account(p)}</TableCell>
+                <TableCell className="pr-4 whitespace-nowrap text-muted-foreground">{date(p.joined_at)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      <dl className="grid gap-1.5 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Mail className="size-3.5 shrink-0" />
-          <span className="truncate text-foreground">{person.email ?? "—"}</span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Phone className="size-3.5 shrink-0" />
-          <span className="text-foreground">{person.phone ?? "—"}</span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <CalendarDays className="size-3.5 shrink-0" />
-          <span>
-            {t("admin.joined")}: <span className="text-foreground">{date(person.joined_at)}</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <ShieldCheck className="size-3.5 shrink-0" />
-          <span>
-            {t("admin.accountStatus")}:{" "}
-            <span className="text-foreground">
-              {person.account_status ? t(`users.${person.account_status}`) : t("admin.noAccount")}
-            </span>
-          </span>
-        </div>
-      </dl>
+
+      <ul className="divide-y md:hidden">
+        {people.map((p) => (
+          <li key={p.id} className={cn("flex items-start gap-3 px-4 py-3", p.member_status === "inactive" && "opacity-60")}>
+            <MemberAvatar name={p.name} className="size-9" />
+            <div className="grid min-w-0 flex-1 gap-1">
+              <p className="truncate font-medium">{p.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {[p.email, p.phone].filter(Boolean).join(" · ") || "—"}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {role(p)}
+                {status(p)}
+                {account(p)}
+              </div>
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">{date(p.joined_at)}</span>
+          </li>
+        ))}
+      </ul>
     </Card>
   )
 }
@@ -252,11 +287,7 @@ export function MessDetails({ messId }: { messId: string }) {
                       <EmptyState icon={UserCog} title={t("admin.noManager")} className="py-10" />
                     </Card>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {mess.managers.map((m) => (
-                        <PersonCard key={m.id} person={m} highlight />
-                      ))}
-                    </div>
+                    <PeopleTable people={mess.managers} />
                   ))}
 
                 {tab === "members" &&
@@ -265,11 +296,7 @@ export function MessDetails({ messId }: { messId: string }) {
                       <EmptyState icon={Users} title={t("admin.noMembers")} className="py-10" />
                     </Card>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {mess.members.map((m) => (
-                        <PersonCard key={m.id} person={m} />
-                      ))}
-                    </div>
+                    <PeopleTable people={mess.members} />
                   ))}
 
                 {tab === "activity" && (

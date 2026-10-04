@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { errorKey } from "@/lib/errors"
@@ -25,6 +26,7 @@ type Values = z.infer<typeof messSchema>
 
 export function SettingsPage() {
   const { t } = useI18n()
+  const confirmSave = useConfirmSave()
   const { mess, isManager, refreshMess } = useMess()
   const form = useForm<Values>({
     resolver: zodResolver(messSchema),
@@ -36,7 +38,9 @@ export function SettingsPage() {
     form.reset({ name: mess.name, address: mess.address, description: mess.description ?? "" })
   }, [mess, form])
 
-  const onSubmit = async (values: Values) => {
+  const onSubmit = (values: Values) => confirmSave(() => persist(values))
+
+  const persist = async (values: Values) => {
     const error = errOf(await updateMess(values))
     if (error) return void toast.error(t(errorKey(error)))
     toast.success(t("messes.updatedToast"))

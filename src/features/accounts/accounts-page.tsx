@@ -1,6 +1,7 @@
 "use client"
 
-import { Calculator, Home, Receipt, Scale, UtensilsCrossed } from "lucide-react"
+import { Calculator, Home, ImageDown, Receipt, Scale, UtensilsCrossed } from "lucide-react"
+import { useState } from "react"
 import { ErrorState } from "@/components/common/error-state"
 import { EmptyState } from "@/components/common/empty-state"
 import { FadeIn, Stagger, StaggerItem } from "@/components/common/motion"
@@ -13,7 +14,8 @@ import { MonthActions, MonthStatusBadge } from "@/features/cycles/month-actions"
 import { MonthGate } from "@/features/cycles/month-gate"
 import { useMess } from "@/features/mess/mess-provider"
 import type { TKey } from "@/i18n"
-import type { CycleSummary, MonthlyCycle } from "@/lib/types"
+import type { CycleSummary, MonthlyCycle, SettlementRow } from "@/lib/types"
+import { MemberHisabDialog } from "./member-hisab-dialog"
 import { useCycleSummary } from "./queries"
 import { SettlementCard, SettlementTable } from "./settlement"
 
@@ -77,7 +79,7 @@ function AccountsContent({ cycle }: { cycle: MonthlyCycle }) {
           <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
         </Card>
       ) : (
-        <AccountsBody summary={summary.data} />
+        <AccountsBody summary={summary.data} cycle={cycle} />
       )}
     </>
   )
@@ -92,9 +94,10 @@ function Line({ label, value, strong }: { label: string; value: React.ReactNode;
   )
 }
 
-function AccountsBody({ summary: s }: { summary: CycleSummary }) {
+function AccountsBody({ summary: s, cycle }: { summary: CycleSummary; cycle: MonthlyCycle }) {
   const { t, money, num } = useI18n()
-  const { isManager, memberId } = useMess()
+  const { isManager, memberId, mess } = useMess()
+  const [selected, setSelected] = useState<SettlementRow | null>(null)
   const myRow = s.members.find((m) => m.member_id === memberId)
 
   return (
@@ -190,28 +193,41 @@ function AccountsBody({ summary: s }: { summary: CycleSummary }) {
             {t(isManager ? "accounts.settlement" : "accounts.mySettlement")}
           </CardTitle>
           <CardDescription>{t("accounts.settlementDesc")}</CardDescription>
+          {s.members.length > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-primary">
+              <ImageDown className="size-3.5" /> {t("hisabCard.clickHint")}
+            </p>
+          )}
         </CardHeader>
         {s.members.length === 0 ? (
           <EmptyState icon={Calculator} title={t("empty.noData")} className="py-10" />
         ) : isManager ? (
           <>
             <div className="hidden lg:block">
-              <SettlementTable rows={s.members} />
+              <SettlementTable rows={s.members} onSelect={setSelected} />
             </div>
             <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:hidden">
               {s.members.map((r) => (
-                <SettlementCard key={r.member_id} row={r} />
+                <SettlementCard key={r.member_id} row={r} onSelect={setSelected} />
               ))}
             </div>
           </>
         ) : myRow ? (
           <div className="p-4">
-            <SettlementCard row={myRow} className="max-w-md" />
+            <SettlementCard row={myRow} className="max-w-md" onSelect={setSelected} />
           </div>
         ) : (
           <EmptyState icon={Calculator} title={t("empty.noData")} className="py-10" />
         )}
       </Card>
+
+      <MemberHisabDialog
+        row={selected}
+        cycle={cycle}
+        messName={mess.name}
+        mealRate={s.meal_rate}
+        onClose={() => setSelected(null)}
+      />
     </div>
   )
 }

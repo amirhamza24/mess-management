@@ -10,6 +10,7 @@ import {
   Pencil,
   ShieldCheck,
   ShieldOff,
+  Trash2,
   UserCheck,
   UserPlus,
   Users,
@@ -36,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useConfirm } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useMess } from "@/features/mess/mess-provider"
 import { errorKey } from "@/lib/errors"
@@ -45,6 +47,7 @@ import { setUserRole } from "@/actions/users"
 import { errOf } from "@/lib/api"
 import type { MessMember, MonthlyMember } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { DeleteMemberDialog } from "./delete-member-dialog"
 import { MemberFormDialog } from "./member-form-dialog"
 import { useMembers, useMonthlyMembers } from "./queries"
 
@@ -55,6 +58,7 @@ type PendingAction =
 
 export function MembersPage() {
   const { t, monthName, date } = useI18n()
+  const ask = useConfirm()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { isManager, cycle, mess, refreshMess, memberId } = useMess()
@@ -65,6 +69,7 @@ export function MembersPage() {
   const [editing, setEditing] = useState<MessMember | null>(null)
   const [action, setAction] = useState<PendingAction>(null)
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState<MessMember | null>(null)
 
   const monthStatus = useMemo(() => {
     const map = new Map<string, MonthlyMember["status"]>()
@@ -101,7 +106,16 @@ export function MembersPage() {
     return true
   }
 
-  const addToMonth = async (m: MessMember) => {
+  const addToMonth = (m: MessMember) =>
+    ask({
+      title: t("confirm.addToMonthTitle", { name: m.full_name, month }),
+      description: t("confirm.addToMonthDesc"),
+      confirmLabel: t("members.addToMonth"),
+      pendingLabel: t("common.saving"),
+      action: () => persistAddToMonth(m),
+    })
+
+  const persistAddToMonth = async (m: MessMember) => {
     if (!cycle) return
     const ok = await run(
       () => addMemberToMonth(cycle.id, m.id),
@@ -130,14 +144,20 @@ export function MembersPage() {
     setAction(null)
   }
 
-  const toggleRole = async (m: MessMember) => {
+  const toggleRole = (m: MessMember) => {
     if (!m.user_id) return
     const userId = m.user_id
-    const ok = await run(
-      () => setUserRole(userId, m.role === "manager" ? "member" : "manager"),
-      t("members.roleChanged")
-    )
-    if (ok) await refreshMess()
+    const role = m.role === "manager" ? "member" : "manager"
+    return ask({
+      title: t("confirm.roleTitle", { name: m.full_name, role: t(`roles.${role}`) }),
+      description: t(role === "manager" ? "confirm.roleManagerDesc" : "confirm.roleMemberDesc"),
+      confirmLabel: t(role === "manager" ? "members.makeManager" : "members.makeMember"),
+      pendingLabel: t("common.saving"),
+      action: async () => {
+        const ok = await run(() => setUserRole(userId, role), t("members.roleChanged"))
+        if (ok) await refreshMess()
+      },
+    })
   }
 
   const openAdd = () => {
@@ -205,6 +225,14 @@ export function MembersPage() {
             {m.status === "active" ? <UserX /> : <UserCheck />}
             {t(m.status === "active" ? "members.deactivate" : "members.activate")}
           </DropdownMenuItem>
+          {m.id !== memberId && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setDeleting(m)}>
+                <Trash2 /> {t("members.deletePermanently")}
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     )
@@ -317,6 +345,7 @@ export function MembersPage() {
       </Card>
 
       <MemberFormDialog open={formOpen} onOpenChange={setFormOpen} member={editing} />
+      <DeleteMemberDialog member={deleting} onClose={() => setDeleting(null)} />
 
       <ConfirmDialog
         open={action?.kind === "remove"}

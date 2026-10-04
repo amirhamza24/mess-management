@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useConfirmSave } from "@/components/providers/confirm-provider"
 import { useI18n } from "@/components/providers/i18n-provider"
 import { useInvalidateCycle } from "@/features/accounts/queries"
 import type { CycleMember } from "@/features/members/queries"
@@ -49,6 +50,7 @@ export function ExpenseFormDialog({
   expense?: ExpenseRow | null
 }) {
   const { t, monthName } = useI18n()
+  const confirmSave = useConfirmSave()
   const cfg = EXPENSE_KINDS[kind]
   const invalidate = useInvalidateCycle()
   const isEdit = !!expense
@@ -88,20 +90,22 @@ export function ExpenseFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, expense])
 
-  const onSubmit = async (raw: Values) => {
+  const onSubmit = (raw: Values) => {
     const values = cfg.schema.parse(raw)
     if (!isDateInMonth(values.date, cycle.year, cycle.month)) {
       form.setError("date", { message: "validation.dateInMonth" })
       return
     }
-    const error = errOf(await saveExpense(kind, cycle.id, raw, expense?.id))
-    if (error) {
-      toast.error(t(errorKey(error)))
-      return
-    }
-    toast.success(t(`${cfg.ns}.${isEdit ? "updated" : "added"}` as TKey))
-    await invalidate(cycle.id, [cfg.queryKey])
-    onOpenChange(false)
+    confirmSave(async () => {
+      const error = errOf(await saveExpense(kind, cycle.id, raw, expense?.id))
+      if (error) {
+        toast.error(t(errorKey(error)))
+        return
+      }
+      toast.success(t(`${cfg.ns}.${isEdit ? "updated" : "added"}` as TKey))
+      await invalidate(cycle.id, [cfg.queryKey])
+      onOpenChange(false)
+    })
   }
 
   const categoryOptions = cfg.categories.map((c) => ({ value: c, label: t(`${cfg.categoryPrefix}.${c}` as TKey) }))

@@ -1,10 +1,10 @@
 "use server"
 
 import { z } from "zod"
-import { requireMessManager } from "@/server/context"
+import { logActivity, requireMessManager } from "@/server/context"
 import { db } from "@/server/db"
 import { AppError, run } from "@/server/errors"
-import { nullIfEmpty, openCycle, parse } from "@/server/guards"
+import { assertNotLastManager, nullIfEmpty, openCycle, parse } from "@/server/guards"
 import { toDbDate } from "@/server/serialize"
 import { memberSchema, nonNegativeAmountSchema } from "@/lib/validation"
 
@@ -122,6 +122,29 @@ export async function removeMemberFromMonth(cycleId: string, memberId: string) {
       data: { status: "removed" },
     })
     if (count === 0) throw new AppError("NOT_FOUND")
+    return null
+  })
+}
+
+/**
+ * Permanently deletes a member and every record that belongs to them (meals,
+ * payments, rent and month memberships in all months). Expenses they paid for
+ * stay, without a payer. A linked account is kept but no longer has a mess.
+ */
+export async function deleteMember(memberId: string) {
+  return run(async () => {
+    const ctx = await requireMessManager()
+    const member = await memberOfMess(memberId, ctx.mess.id)
+    if (member.id === ctx.member.id) throw new AppError("FORBIDDEN")
+    if (member.role === "manager") await assertNotLastManager(ctx.mess.id, member.id)
+    await db.$transaction([
+      db.meal.deleteMany({ where: { member_id: member.id } }),
+      db.payment.deleteMany({ where: { member_id: member.id } }),
+      db.houseRent.deleteMany({ where: { member_id: member.id } }),
+      db.monthlyMember.deleteMany({ where: { member_id: member.id } }),
+      db.member.delete({ where: { id: member.id } }),
+    ])
+    await logActivity(ctx.mess.id, ctx.user, "member_deleted", member.full_name)
     return null
   })
 }

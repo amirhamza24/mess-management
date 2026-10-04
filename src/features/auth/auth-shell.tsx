@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, useReducedMotion } from "framer-motion"
-import { CalendarCheck2, Receipt, ShoppingBasket, UtensilsCrossed } from "lucide-react"
+import { CalendarCheck2, Receipt, ShoppingBasket, Users, UtensilsCrossed } from "lucide-react"
 import { Logo, LogoMark } from "@/components/brand/logo"
 import { Rings } from "@/components/brand/rings"
 import { LanguageSwitch, ThemeToggle } from "@/components/layout/preferences"
@@ -34,6 +34,41 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   )
 }
 
+const FEATURES = [
+  { key: "auth.feature1", icon: Users },
+  { key: "auth.feature2", icon: ShoppingBasket },
+  { key: "auth.feature3", icon: CalendarCheck2 },
+] as const
+
+/** Ring circles that drift slowly around the brand panel (static when reduced motion is on). */
+const DRIFT = [
+  { size: 220, top: "8%", left: "-6%", x: [0, 60, 20, 0], y: [0, 40, 90, 0], duration: 26 },
+  { size: 140, top: "62%", left: "72%", x: [0, -70, -30, 0], y: [0, -50, 30, 0], duration: 22 },
+  { size: 90, top: "30%", left: "80%", x: [0, -40, 30, 0], y: [0, 70, 20, 0], duration: 18 },
+  { size: 320, top: "70%", left: "-12%", x: [0, 50, 90, 0], y: [0, -60, -20, 0], duration: 32 },
+  { size: 60, top: "18%", left: "48%", x: [0, 50, -30, 0], y: [0, 30, 60, 0], duration: 16 },
+]
+
+function DriftingRings() {
+  const reduce = useReducedMotion()
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      {DRIFT.map((r, i) => (
+        <motion.span
+          key={i}
+          className="absolute rounded-full border border-white/15"
+          style={{ width: r.size, height: r.size, top: r.top, left: r.left }}
+          animate={reduce ? undefined : { x: r.x, y: r.y, scale: [1, 1.08, 0.96, 1], opacity: [0.5, 1, 0.7, 0.5] }}
+          transition={{ duration: r.duration, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <span className="absolute inset-[18%] rounded-full border border-white/10" />
+          <span className="absolute top-0 left-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/40" />
+        </motion.span>
+      ))}
+    </div>
+  )
+}
+
 function BrandPanel() {
   const { t, money, num } = useI18n()
   const reduce = useReducedMotion()
@@ -46,10 +81,11 @@ function BrandPanel() {
         }
 
   return (
-    <aside className="relative hidden overflow-hidden bg-brand-deep text-white lg:flex lg:flex-col">
+    <aside className="relative hidden overflow-hidden bg-brand-deep text-white lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:self-start">
       {/* Ring circles — white on deep violet, very low opacity */}
       <Rings size={760} intensity="medium" tone="light" className="top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.08),transparent_55%)]" />
+      <DriftingRings />
 
       <div className="relative z-10 flex items-center gap-2.5 p-10">
         <LogoMark className="bg-white/10 ring-1 ring-white/20" />
@@ -128,9 +164,9 @@ function BrandPanel() {
       </div>
 
       <ul className="relative z-10 grid gap-2.5 p-10 text-sm text-white/75 xl:px-16">
-        {(["auth.feature1", "auth.feature2", "auth.feature3"] as const).map((key) => (
+        {FEATURES.map(({ key, icon: Icon }) => (
           <li key={key} className="flex items-center gap-2.5">
-            <CalendarCheck2 className="size-4 text-brand-soft" />
+            <Icon className="size-4 text-brand-soft" />
             {t(key)}
           </li>
         ))}
